@@ -27,6 +27,16 @@ if(!zh){
   window.LINEAGES.forEach(x=>{x[1]=window.LINEAGE_NAMES[x[0]][li]});
 }
 
+// 名胜古迹
+(window.LANDMARKS||[]).forEach(m=>{
+  const nk=L==="zh-Hant"?"zht":zh?"zh":L;
+  m.N=m.n[nk]||m.n.en; m.N2=zh?m.n.en:(m.N===m.n.en?"":m.n.en);
+  m.D=L==="zh-Hant"?m.d.zht:zh?m.d.zh:m.d.en;
+  const ci={"zh-Hans":0,"zh-Hant":0,de:1,fr:2,es:3}[L];
+  m.C=ci===undefined?m.country:(L==="zh-Hant"?m.countryNames.zht:m.countryNames[["zh","de","fr","es"][ci]]);
+  m._k=[m.n.zh,m.n.en,m.country].join(" ");
+  const th=m.img.then; if(th) th.C=L==="zh-Hant"?th.capZht:zh?th.capZh:th.cap;
+});
 // 静态界面
 document.documentElement.lang=L; document.title=U.title+(zh?" · ":" · ")+U.sub.split(" · ")[0];
 if(!zh) document.body.classList.add("latin");

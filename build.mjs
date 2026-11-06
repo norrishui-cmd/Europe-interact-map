@@ -14,7 +14,7 @@ const R_KM = 6371;
 // ---------- load content (same files the app uses) ----------
 const ctx = { window: {} };
 vm.createContext(ctx);
-for (const f of ['i18n.js', 'polities.js', 'content.js', 'content_more.js', 'content_en.js', 'content_more_en.js']) {
+for (const f of ['i18n.js', 'polities.js', 'content.js', 'content_more.js', 'content_en.js', 'content_more_en.js', 'landmarks.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window, E = W.CONTENT_EN;
@@ -131,7 +131,7 @@ function mapSVG(s) {
 }
 
 // ---------- page template ----------
-const NAV = [['Years', '/en/years'], ['Cities', '/en/cities'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Years', '/en/years'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage }) {
   const bc = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c[0], item: SITE + c[1] })) };
   const lds = [bc, ...ld].map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`).join('\n');
@@ -177,6 +177,17 @@ const eventsIn = (a, b) => EVENTS.filter(e => e.y >= a && e.y <= b).sort((x, y) 
 const pages = [];
 const add = (url, html) => pages.push({ url, html });
 
+// ---------- landmarks ----------
+const LMS = (W.LANDMARKS || []).map(m => ({ ...m, name: m.n.en }));
+const ctySlug = c => slug(c);
+const STATUS = { standing: 'Standing', ruins: 'Ruins', lost: 'Lost', rebuilt: 'Rebuilt' };
+const THEN = { standing: 'Historical view', ruins: 'As it was', lost: 'As it was', rebuilt: 'Before' };
+const NOW = { standing: 'Today', ruins: 'The ruins today', lost: 'The site today', rebuilt: 'Today' };
+const imgH = i => (i.w && i.h ? Math.round(500 * i.h / i.w) : 333);
+const credit = i => `${esc(i.artist || 'Unknown author')}${i.license ? `, ${i.licUrl ? `<a href="${esc(i.licUrl)}" rel="license nofollow">${esc(i.license)}</a>` : esc(i.license)}` : ''}, via <a href="${esc(i.page)}" rel="nofollow">Wikimedia Commons</a>`;
+const fig = (i, label, alt) => i ? `<figure class="lmfig"><div class="lmlabel">${esc(label)}</div><img src="${esc(i.t960 || i.t500)}" srcset="${esc(i.t500)} 500w, ${esc(i.t960 || i.t500)} 960w" sizes="(max-width: 640px) 100vw, 440px" width="500" height="${imgH(i)}" alt="${esc(alt)}" loading="lazy" decoding="async"><figcaption>${i.cap ? esc(i.cap) + '. ' : ''}${credit(i)}</figcaption></figure>` : '';
+const lmNear = (ll, km, skip) => LMS.filter(o => o.id !== skip && geoDistance(o.c, ll) * R_KM < km).sort((a, b) => geoDistance(a.c, ll) - geoDistance(b.c, ll));
+const lmCard = o => `<li class="lmcard"><a href="/en/landmark/${o.id}">${o.img.now ? `<img src="${esc(o.img.now.t500)}" alt="${esc(o.name)} today" loading="lazy" width="500" height="${imgH(o.img.now)}">` : ''}<span class="t">${esc(o.name)}</span></a><span class="m">${esc(STATUS[o.st])} · ${fy(o.y)}</span></li>`;
 // ---------- year pages ----------
 for (const s of SNAPS) {
   const end = snapEnd(s), era = ERAS.find(e => s >= e.from && s < e.to) || ERAS.at(-1);
@@ -220,6 +231,7 @@ ${table(['Year', 'Event'], c.ev.map(e => [`<a href="/en/year/${yearSlug(snapFor(
 <p class="muted">Derived from the border maps; each row runs until the next recorded border change.</p>
 ${table(['Period', 'State'], rows.map(r => [`${fyShort(r.from)}–${r.to >= 2026 ? 'today' : fyShort(r.to)}`, stLink(r.n)]))}
 ${ns.length ? `<h2>Battles and sites near ${esc(c.name)}</h2><ul class="links">${ns.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
+${lmNear(c.c, 60).length ? `<h2>Landmarks in and around ${esc(c.name)}</h2><ul class="lmgrid">${lmNear(c.c, 60).map(lmCard).join('')}</ul>` : ''}
 ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a href="/en/city/${x.c.id}">${esc(x.c.name)}</a> · about ${Math.round(x.d)} km</li>`).join('')}</ul>` : ''}`;
   add(`/en/city/${c.id}`, page({ url: `/en/city/${c.id}`, title: `${c.name} History: Former Names${old.length ? ` (${old.slice(0, 2).join(', ')})` : ''} & Timeline Map | Chronica Maps`,
     desc: cut(`${c.bio} Former names, timeline of events and every state that ruled ${c.name}, on a historical map.`),
@@ -304,6 +316,40 @@ ${sites.length ? `<h2>Battles and sites</h2><ul class="links">${sites.map(x => `
     crumbs: [['Home', '/'], ['Eras', '/en/eras'], [e.name, `/en/era/${e.slug}`]], body }));
 });
 
+
+// ---------- landmark pages ----------
+for (const m of LMS) {
+  const s = snapFor(Math.max(-500, m.y)), nc = nearCities(m.c, 1)[0], rows = ruledBy(m.c);
+  const near = lmNear(m.c, 500, m.id).slice(0, 6), ns = nearSites(m.c, 150);
+  const alt1 = `${m.name}, ${THEN[m.st].toLowerCase()}`, alt2 = `${m.name}, ${NOW[m.st].toLowerCase()}`;
+  const body = `<p class="lead">${esc(m.d.en)}</p>
+<div class="lmgal">${fig(m.img.then, THEN[m.st], alt1)}${fig(m.img.now, NOW[m.st], alt2)}</div>
+<h2>Key facts</h2>
+${table(['', ''], [['Country today', `<a href="/en/landmarks/${ctySlug(m.country)}">${esc(m.country)}</a>`], ['Status', STATUS[m.st]], ['Date', `<a href="/en/year/${yearSlug(s)}">${fy(m.y)}</a>`], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Location', `${m.c[1].toFixed(3)}° N, ${m.c[0].toFixed(3)}° E`]])}
+${mapBlock(s, `Map showing ${m.name} in ${fy(s)}`, pin(m.c, m.name))}
+${openBtn(`${hashYear(Math.max(-500, m.y))}-m-${m.id}`, `Open ${m.name} in the interactive map`)}
+<h2>Who ruled this place</h2>
+<p class="muted">Derived from the border maps; each row runs until the next recorded border change.</p>
+${table(['Period', 'State'], rows.map(r => [`${fyShort(r.from)}–${r.to >= 2026 ? 'today' : fyShort(r.to)}`, stLink(r.n)]))}
+${near.length ? `<h2>Other landmarks nearby</h2><ul class="lmgrid">${near.map(lmCard).join('')}</ul>` : ''}
+${ns.length ? `<h2>Battles and sites nearby</h2><ul class="links">${ns.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
+<p>More: <a href="/en/landmarks/${ctySlug(m.country)}">Historic landmarks of ${esc(m.country)}</a> · <a href="/en/landmarks">All landmarks</a></p>`;
+  const imgs = [m.img.then, m.img.now].filter(Boolean);
+  add(`/en/landmark/${m.id}`, page({ url: `/en/landmark/${m.id}`, title: `${m.name} Then and Now: History, Old Images & Map | Chronica Maps`,
+    desc: cut(`${m.name} then and now: ${m.d.en}`), h1: `${esc(m.name)}: Then and Now`,
+    crumbs: [['Home', '/'], ['Landmarks', '/en/landmarks'], [m.country, `/en/landmarks/${ctySlug(m.country)}`], [m.name, `/en/landmark/${m.id}`]], body, ogImage: null,
+    ld: [{ '@context': 'https://schema.org', '@type': 'LandmarksOrHistoricalBuildings', name: m.name, description: m.d.en, image: imgs.map(i => i.t960 || i.t500), geo: { '@type': 'GeoCoordinates', latitude: m.c[1], longitude: m.c[0] }, containedInPlace: { '@type': 'Country', name: m.country } }] }));
+  m.imgs = imgs;
+}
+const COUNTRIES = [...new Set(LMS.map(m => m.country))].sort();
+for (const c of COUNTRIES) {
+  const list = LMS.filter(m => m.country === c).sort((a, b) => a.y - b.y);
+  add(`/en/landmarks/${ctySlug(c)}`, page({ url: `/en/landmarks/${ctySlug(c)}`, title: `Historic Landmarks of ${c}: Then and Now | Chronica Maps`,
+    desc: cut(`${list.length} historic landmark${list.length > 1 ? 's' : ''} of ${c} then and now: ${list.map(m => m.name).join(', ')}. Old images, today's views and maps.`),
+    h1: `Historic Landmarks of ${esc(c)}`, crumbs: [['Home', '/'], ['Landmarks', '/en/landmarks'], [c, `/en/landmarks/${ctySlug(c)}`]],
+    body: `<p class="lead">${esc(`${list.length} landmark${list.length > 1 ? 's' : ''} in today's ${c}, from ${fy(list[0].y)} to ${fy(list.at(-1).y)}, each shown as it was and as it is now.`)}</p><ul class="lmgrid">${list.map(lmCard).join('')}</ul><p><a href="/en/landmarks">All countries</a></p>`,
+    ld: [{ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: list.map((m, i) => ({ '@type': 'ListItem', position: i + 1, url: `${SITE}/en/landmark/${m.id}`, name: m.name })) }] }));
+}
 // ---------- quiz + hubs ----------
 add('/en/quiz', page({ url: '/en/quiz', title: 'European History Map Quiz: Find Historic Places | Chronica Maps',
   desc: 'Test your historical geography: ten questions, each naming an ancient city or battle with a clue. Click the map where you think it was and score by distance.',
@@ -315,6 +361,8 @@ hub('/en/years', 'Maps of Europe by Year (500 BC – Today)', 'Maps of Europe by
   `<ul class="grid">${SNAPS.map(s => `<li><a href="/en/year/${yearSlug(s)}"><img src="/maps/${yearSlug(s)}.svg" alt="Map of Europe in ${fy(s)}" loading="lazy" width="300" height="200"><span>Europe in ${fy(s)}</span></a></li>`).join('')}</ul>`, 'Years');
 hub('/en/cities', 'Historic Cities of Europe: Former Names & Timelines', 'Historic Cities of Europe', `${CITIES.length} cities with their former names, timelines of key events and every state that ruled them.`,
   table(['City', 'Earliest name on record', 'From'], [...CITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => [`<a href="/en/city/${c.id}">${esc(c.name)}</a>`, esc(c.names[0].name), fy(c.names[0].from)])), 'Cities');
+hub('/en/landmarks', 'Historic Landmarks of Europe: Then and Now', 'Historic Landmarks: Then and Now', `${LMS.length} historic landmarks in ${COUNTRIES.length} countries, each shown as it was and as it looks today, with lost buildings set beside what stands on their site now.`,
+  COUNTRIES.map(c => `<h2><a href="/en/landmarks/${ctySlug(c)}">${esc(c)}</a></h2><ul class="lmgrid">${LMS.filter(m => m.country === c).sort((a, b) => a.y - b.y).map(lmCard).join('')}</ul>`).join(''), 'Landmarks');
 hub('/en/battles', 'Battles and Historic Sites of Europe on a Map', 'Battles and Historic Sites', `${SITES.length} battles and historic sites from ${fy(Math.min(...SITES.map(s => s.y)))} to ${fy(Math.max(...SITES.map(s => s.y)))}, each placed on the border map of its time.`,
   table(['Year', 'Battle or site'], [...SITES].sort((a, b) => a.y - b.y).map(s => [fy(s.y), `<a href="/en/battle/${s.id}">${esc(s.title)}</a>`])), 'Battles & sites');
 hub('/en/states', 'States and Empires of European History: Maps Over Time', 'States and Empires', `${STATE_LIST.length} states and empires that appear on at least three border maps, each with its territory over time.`,
@@ -337,6 +385,7 @@ for (const s of SNAPS) write(`maps/${yearSlug(s)}.svg`, mapSVG(s));
 write('assets/page.css', fs.readFileSync(path.join(ROOT, 'page.css'), 'utf8'));
 write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#a8322a"/><text x="32" y="45" text-anchor="middle" font-family="Georgia,serif" font-size="40" font-weight="700" fill="#f6e9cf">C</text></svg>`);
 const urls = ['/', ...pages.map(p => p.url)];
-write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod></url>`).join('\n')}\n</urlset>\n`);
+const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
+write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
 write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
 console.log(`Built ${pages.length} pages + ${SNAPS.length} maps → dist/`);

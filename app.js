@@ -3,7 +3,7 @@
 const MINY=-500, MAXY=2026;
 const W=()=>window.innerWidth, H=()=>window.innerHeight;
 let ATLAS=null, PHYS=null, SNAPS=[], year=-27, curSnap=null, transform=d3.zoomIdentity;
-const layers={cities:true,sites:true,rivers:true,ghost:true,modern:false};
+const layers={cities:true,sites:true,landmarks:true,rivers:true,ghost:true,modern:false};
 let journey=null, jIdx=0, quiz=null, playing=null, hoverName=null;
 
 // ---------- 工具 ----------
@@ -31,7 +31,7 @@ const path=d3.geoPath(projection);
 const seaRect=svg.append("rect").attr("class","sea");
 const gMap=svg.append("g");
 const gLand=gMap.append("g"), gPol=gMap.append("g"), gLake=gMap.append("g"), gRiv=gMap.append("g"), gGhost=gMap.append("g"), gModern=gMap.append("g"), gTex=gMap.append("g"), gJ=gMap.append("g");
-const gOver=svg.append("g"), gLab=gOver.append("g"), gSites=gOver.append("g"), gCities=gOver.append("g"), gJS=gOver.append("g"), gQuiz=gOver.append("g"), gPulse=gOver.append("g");
+const gOver=svg.append("g"), gLab=gOver.append("g"), gSites=gOver.append("g"), gLm=gOver.append("g"), gCities=gOver.append("g"), gJS=gOver.append("g"), gQuiz=gOver.append("g"), gPulse=gOver.append("g");
 const tip=d3.select("#tip");
 
 function fit(){
@@ -140,6 +140,13 @@ function placeOverlays(){
    .on("click",(e,d)=>{e.stopPropagation();if(quiz)return;siteCard(d)})
    .on("mousemove",(e,d)=>showTip(e,`<b>${esc(d.zh)}</b> · ${fmtYFull(d.y)}<br><span class="en">${esc(d.en)}</span>`)).on("mouseleave",hideTip);
   S.select("text").text(d=>Math.abs(d.y-year)<=40||k>=2.2?`${d.zh}·${fmtY(d.y)}`:"");
+  // 名胜古迹
+  const lms=layers.landmarks?(window.LANDMARKS||[]).filter(m=>m.y<=year||k>=2.4):[];
+  const M=gLm.selectAll("g.lm").data(lms,d=>d.id).join(en=>{const g=en.append("g").attr("class",d=>"lm st-"+d.st);g.append("path").attr("d","M-6,1L0,-6L6,1Z M-5,2h10v5h-10Z");g.append("text").attr("x",8).attr("y",4);return g});
+  M.attr("transform",d=>`translate(${T(projection(d.c))})`).classed("future",d=>d.y>year)
+   .on("click",(e,d)=>{e.stopPropagation();if(quiz)return;landmarkCard(d)})
+   .on("mousemove",(e,d)=>showTip(e,`<b>${esc(d.N)}</b>${d.N2?` <span class="en">${esc(d.N2)}</span>`:""}<br>${esc(U.lmStatus[d.st])} · ${esc(d.C)}`)).on("mouseleave",hideTip);
+  M.select("text").text(d=>k>=2.2?d.N:"");
   // 行迹
   if(journey){
     gJS.selectAll("g.jstop").attr("transform",d=>`translate(${T(projection(d[2]))})`);
@@ -250,6 +257,26 @@ function cityCard(c){
   ${ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""}
   ${historyTable(c.c)}`);
   flyTo(c.c);pulse(c.c);lastCard="c-"+c.id;writeHash();
+}
+function lmFig(img,label){
+  if(!img)return "";
+  const cr=[img.artist,img.license].filter(Boolean).map(esc).join(" · ");
+  return `<figure class="lmimg"><div class="lmlabel">${esc(label)}</div><img src="${img.t500}" alt="${esc(label)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(U.lmNoImg)}</div>'"><figcaption>${(img.C||img.cap)?esc(img.C||img.cap)+"<br>":""}${esc(U.lmCredit)}: ${cr} · <a href="${img.page}" target="_blank" rel="noopener">Wikimedia Commons</a></figcaption></figure>`;
+}
+function landmarkCard(m){
+  stopPlay();
+  const [c,d]=nearestCity(m.c);
+  const onSite=/chronicamaps\.com$|vercel\.app$/.test(location.hostname);
+  const near=(window.LANDMARKS||[]).filter(o=>o!==m&&d3.geoDistance(o.c,m.c)*6371<400).slice(0,6);
+  openPanel(`<h2>${esc(m.N)}</h2><div class="latin">${esc(m.N2||"")}</div>
+  <div class="lmmeta"><span class="lmst st-${m.st}">${esc(U.lmStatus[m.st])}</span> ${esc(U.lmCountry)}: ${esc(m.C)} · <a href="javascript:void 0" data-y="${Math.max(-500,m.y)}">${fmtYFull(m.y)}</a></div>
+  <div class="bio">${esc(m.D)}</div>
+  ${lmFig(m.img.then,U.lmThen[m.st])}${lmFig(m.img.now,U.lmNow[m.st])}
+  ${onSite?`<p><a href="/en/landmark/${m.id}">${esc(U.lmPage)}</a></p>`:""}
+  <div class="sec">${esc(U.lmCity)}</div><table><tr><td class="y">${Math.round(d)} ${esc(U.km)}</td><td><a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a></td></tr></table>
+  ${near.length?`<div class="sec">${esc(U.lmNear)}</div><div class="lmnear">${near.map(o=>`<a href="javascript:void 0" data-lm="${o.id}">${esc(o.N)}</a>`).join(" · ")}</div>`:""}`);
+  d3.selectAll("#pbody [data-lm]").on("click",function(){landmarkCard(window.LANDMARKS.find(x=>x.id===this.dataset.lm))});
+  flyTo(m.c);pulse(m.c);lastCard="m-"+m.id;writeHash();
 }
 function siteCard(s){
   stopPlay();setYear(s.y);
@@ -368,6 +395,7 @@ let IDX=null;
 function buildIndex(){
   IDX=[];
   window.CITIES.forEach(c=>IDX.push({k:[c.zh,c._k||"",...c.names.map(n=>n[1])].join(" "),label:c.zh,tag:U.tagCity+" · "+c.names[0][1],go:()=>cityCard(c)}));
+  (window.LANDMARKS||[]).forEach(m=>IDX.push({k:[m.N,m.N2,m._k].join(" "),label:m.N,tag:`${U.tagLandmark} · ${m.C}`,go:()=>landmarkCard(m)}));
   window.SITES.forEach(s=>IDX.push({k:s.zh+" "+(s._k||""),label:s.zh,tag:`${s.k==="battle"?U.tagBattle:U.tagSite} · ${fmtY(s.y)}`,go:()=>siteCard(s)}));
   window.JOURNEYS.forEach(j=>IDX.push({k:j.zh+" "+j.who+" "+(j._k||""),label:j.zh,tag:U.tagJourney+" · "+j.span,go:()=>startJourney(j.id)}));
   window.RULERS.forEach(R=>R.list.forEach(r=>IDX.push({k:r[2]+" "+R.t,label:r[2],tag:`${R.t} · ${fmtY(r[0])}–${fmtY(r[1])}`,go:()=>{setYear(r[0]);writeHash()}})));
@@ -407,6 +435,7 @@ function readHash(){
   if(/^quiz/.test(h))return startQuiz();
   m=h.match(/(?:^|-)p-([a-z]+)/);if(m)return startJourney(m[1]);
   m=h.match(/(?:^|-)c-([a-z0-9]+)/);if(m&&cityById[m[1]]){const y=year;cityCard(cityById[m[1]]);setYear(y);return}
+  m=h.match(/(?:^|-)m-([a-z0-9-]+?)(?:-l-|$)/);if(m&&window.LANDMARKS){const o=window.LANDMARKS.find(x=>x.id===m[1]);if(o)return landmarkCard(o)}
   m=h.match(/(?:^|-)s-([a-z0-9]+)/);if(m&&siteById[m[1]])return siteCard(siteById[m[1]]);
 }
 window.addEventListener("hashchange",()=>{if(ATLAS)readHash()});
