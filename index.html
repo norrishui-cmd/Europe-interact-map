@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>欧陆时序 · 欧洲历史交互地图</title>
+<title>Chronica Maps · Interactive Historical Atlas of Europe (500 BC – Today)</title>
 <meta name="description" content="Interactive historical atlas of Europe, 500 BC – present: changing borders, city histories, battles, journeys and a place-name quiz. 欧洲历史交互地图。">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Chronica Maps","url":"https://chronicamaps.com/","description":"Interactive historical atlas of Europe, 500 BC to today"}</script>
 <link rel="canonical" href="https://chronicamaps.com/">
 <meta property="og:url" content="https://chronicamaps.com/">
 <meta property="og:title" content="欧陆时序 · Chronica Europae">
@@ -139,6 +141,9 @@ body.latin #eras div{font-size:12px}
 #era b{color:var(--seal);letter-spacing:.2em;margin-right:8px}
 #tip{position:fixed;pointer-events:none;background:#2b2117;color:#f6eedb;font-size:12px;padding:5px 8px;border-radius:3px;z-index:20;display:none;max-width:280px;line-height:1.5}
 #tip .en{font-family:var(--latin);font-style:italic;opacity:.8}
+#explore{position:fixed;right:14px;bottom:150px;z-index:4;font-size:12.5px;background:rgba(246,238,219,.92);padding:3px 9px;border-radius:3px;border:1px solid #c9b48a}
+#explore a{color:var(--seal);text-decoration:none}
+#explore a:hover{text-decoration:underline}
 #note{position:fixed;right:14px;bottom:124px;font-size:11px;color:var(--ink2);z-index:4;background:rgba(246,238,219,.85);padding:3px 8px;border-radius:3px;max-width:420px;text-align:right}
 #note a{color:var(--ink2)}
 #quizBar{display:none;position:fixed;left:50%;top:60px;transform:translateX(-50%);z-index:7;padding:12px 18px;width:min(560px,92vw);text-align:center}
@@ -150,6 +155,7 @@ body.latin #eras div{font-size:12px}
 #loading{position:fixed;inset:0;display:grid;place-items:center;background:var(--paper);z-index:50;font-size:18px;letter-spacing:.3em}
 @media (max-width:760px){
  #title{width:calc(100vw - 28px)} #legend{display:none} #panel{right:8px;left:8px;width:auto;top:auto;bottom:124px;max-height:50vh}
+ #explore{bottom:auto;top:200px;right:8px;left:8px;text-align:center}
  #tools{top:auto;bottom:122px;flex-direction:row;flex-wrap:wrap;right:8px;left:8px;justify-content:flex-end;gap:4px} .tbtn{font-size:11px;padding:4px 7px} #era{display:none} #note{display:none} #rulers{display:none} #snapInfo{display:none} #axis span:nth-child(even){display:none} #title .chips{display:none} #title{padding:8px 10px} #title h1{font-size:18px} #title{position:fixed}
 #langSel{position:absolute;right:10px;top:10px;font-family:var(--serif);font-size:12px;border:1px solid #b79d6e;background:#fbf3e0;border-radius:3px;padding:2px 4px;color:var(--ink);cursor:pointer}
 body.hant{--serif:"Noto Serif TC","Noto Serif SC","PMingLiU",serif}
@@ -193,6 +199,7 @@ body.latin #eras div{font-size:12px}
 <div id="legend" class="plate"><h3>当前图例 · 悬停高亮 / 点击聚焦</h3><div id="legItems"></div></div>
 <div id="panel" class="plate panel"><button class="x" onclick="closePanel()">×</button><div id="pbody"></div></div>
 <div id="quizBar" class="plate"></div>
+<nav id="explore" aria-label="Explore"><a href="/en/years">Maps by year</a> · <a href="/en/cities">Cities</a> · <a href="/en/battles">Battles</a> · <a href="/en/states">States</a> · <a href="/en/journeys">Journeys</a> · <a href="/en/eras">Eras</a></nav>
 <div id="note">历史疆域为示意性近似 · 底图源自 <a href="https://github.com/aourednik/historical-basemaps" target="_blank">historical-basemaps</a>（GPL-3.0）与 Natural Earth · 致敬 <a href="https://github.com/DeanChensj/jiangshan-map" target="_blank">江山时序</a></div>
 <div id="timeline" class="plate">
  <div id="tlTop">

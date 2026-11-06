@@ -1,6 +1,11 @@
 {
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
   "headers": [
+    { "source": "/maps/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
     { "source": "/(.*)\\.json", "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" }] },
-    { "source": "/(.*)\\.js", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
+    { "source": "/(.*)\\.(js|css)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }] }
   ]
 }
