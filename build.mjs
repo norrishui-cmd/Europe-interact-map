@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
-import { geoAzimuthalEqualArea, geoNaturalEarth1, geoPath, geoContains, geoArea, geoDistance, geoBounds, geoCentroid } from 'd3-geo';
+import { geoProjection, geoPath, geoContains, geoArea, geoDistance, geoBounds, geoCentroid } from 'd3-geo';
 
 const ROOT = process.cwd();
 const OUT = path.join(ROOT, 'dist');
@@ -88,17 +88,20 @@ const JOURNEYS = W.JOURNEYS.map(j => { const e = E.journeys[j.id];
 // ---------- projection & static maps ----------
 // same regions as the app
 const REGIONS = {
-  europe: { c: [17, 53], clip: 68, box: [-24, 35, 58, 71.5], name: 'Europe' },
-  asia: { c: [95, 32], clip: 68, box: [38, -6, 146, 56], name: 'Asia' },
-  africa: { c: [18, 3], clip: 68, box: [-19, -35, 52, 37.5], name: 'Africa' },
-  oceania: { c: [155, -22], clip: 62, box: [112, -47, 185, -1], name: 'Oceania' },
-  world: { c: [11, 0], clip: 0, box: null, name: 'the world' },
+  europe: { c: [17, 53], clip: 1, box: [-24, 34, 58, 71.5], name: 'Europe' },
+  asia: { c: [95, 32], clip: 1, box: [34, -8, 148, 56], name: 'Asia' },
+  africa: { c: [18, 3], clip: 1, box: [-19, -35, 52, 37.5], name: 'Africa' },
+  oceania: { c: [155, -22], clip: 1, box: [110, -48, 182, 0], name: 'Oceania' },
+  world: { c: [11, 0], clip: 0, box: [-168.9, -57, 190.9, 84], name: 'the world' },
 };
 const boxPts = b => { const [x0, y0, x1, y1] = b, pts = []; for (let x = x0; x <= x1; x++) pts.push([x, y0], [x, y1]); for (let y = y0; y <= y1; y++) pts.push([x0, y], [x1, y]); return { type: 'MultiPoint', coordinates: pts }; };
+function millerRaw(l, p) { return [l, 1.25 * Math.log(Math.tan(Math.PI / 4 + 0.4 * p))]; }
+millerRaw.invert = (x, y) => [x, 2.5 * Math.atan(Math.exp(0.8 * y)) - 0.625 * Math.PI];
 const PROJS = {}, PATHS = {};
 for (const [k, R] of Object.entries(REGIONS)) {
-  const p = R.clip ? geoAzimuthalEqualArea().rotate([-R.c[0], -R.c[1]]).clipAngle(R.clip) : geoNaturalEarth1().rotate([-R.c[0], 0]);
-  p.fitExtent([[10, 10], [1190, 790]], R.box ? boxPts(R.box) : { type: 'Sphere' });
+  // flat Miller cylindrical projection, same as the app
+  const p = geoProjection(millerRaw).rotate([-11, 0]);
+  p.fitExtent([[10, 10], [1190, 790]], boxPts(R.box));
   p.clipExtent([[0, 0], [1200, 800]]);
   PROJS[k] = p; PATHS[k] = geoPath(p).digits(1);
 }
@@ -152,7 +155,7 @@ function mapSVG(s, r = 'europe') {
   const pols = fs_.map(f => { const n = f.properties.n; return `<path d="${P(f)}" fill="${colorOf(n)}" fill-opacity="${isTribal(n) ? 0.3 : 0.6}" stroke="#5a4630" stroke-opacity=".55" stroke-width=".7"/>`; }).join('');
   const riv = PHYS.rivers.features.map(f => P(f)).filter(Boolean).map(d => `<path d="${d}"/>`).join('');
   const lakes = PHYS.lakes.features.map(f => P(f)).filter(Boolean).map(d => `<path d="${d}"/>`).join('');
-  const sphere = r === 'world' ? `<path d="${P({ type: 'Sphere' })}" fill="none" stroke="#7d6a4c" stroke-width="1"/>` : '';
+  const sphere = '';
   const labs = fs_.filter(f => !isTribal(f.properties.n)).slice(0, r === 'world' ? 18 : 14).map(f => {
     let g = f.geometry, best = g;
     if (g.type === 'MultiPolygon') { let ba = -1; for (const c of g.coordinates) { const pg = { type: 'Polygon', coordinates: c }; const a = geoArea(pg); if (a > ba) { ba = a; best = pg; } } }

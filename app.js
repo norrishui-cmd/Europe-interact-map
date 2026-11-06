@@ -27,19 +27,23 @@ const tScale=d3.scaleLinear().domain([-500,0,1000,1500,1800,2026]).range([0,.17,
 // ---------- 投影与图层 ----------
 const svg=d3.select("#map");
 // 区域视图：欧洲 / 亚洲 / 非洲 / 大洋洲 / 世界
+// 平面地图（米勒圆柱投影），各大洲按钮只是缩放到对应范围
 const REGIONS={
-  europe:{c:[17,53],clip:68,box:[-24,35,58,71.5],pad:150},
-  asia:{c:[95,32],clip:68,box:[38,-6,146,56],pad:150},
-  africa:{c:[18,3],clip:68,box:[-19,-35,52,37.5],pad:150},
-  oceania:{c:[155,-22],clip:62,box:[112,-47,185,-1],pad:150},
-  world:{c:[11,0],clip:0,box:null,pad:0}
+  europe:{c:[17,53],box:[-24,34,58,71.5]},
+  asia:{c:[95,32],box:[34,-8,148,56]},
+  africa:{c:[18,3],box:[-19,-35,52,37.5]},
+  oceania:{c:[155,-22],box:[110,-48,182,0]},
+  world:{c:[11,0],box:[-168.9,-57,190.9,84]}
 };
 const REGION_KEYS=Object.keys(REGIONS);
-function makeProj(r){const R=REGIONS[r];return R.clip?d3.geoAzimuthalEqualArea().rotate([-R.c[0],-R.c[1]]).clipAngle(R.clip).precision(.3):d3.geoNaturalEarth1().rotate([-R.c[0],0]).precision(.3)}
-let projection=makeProj("europe");
+function millerRaw(l,p){return [l,1.25*Math.log(Math.tan(Math.PI/4+.4*p))]}
+millerRaw.invert=(x,y)=>[x,2.5*Math.atan(Math.exp(.8*y))-.625*Math.PI];
+function makeProj(){return d3.geoProjection(millerRaw).rotate([-11,0]).precision(.3)}
+let projection=makeProj();
 const path=d3.geoPath(projection);
-function vis(ll){const R=REGIONS[region];return !R.clip||d3.geoDistance(ll,R.c)<R.clip*Math.PI/180*.96}
-function regionOf(ll){let best="world",bd=1e9;for(const k of REGION_KEYS){const R=REGIONS[k];if(!R.clip)continue;const [x0,y0,x1,y1]=R.box;let lon=ll[0];if(lon<x0)lon+=360;const inBox=lon>=x0-4&&lon<=x1+4&&ll[1]>=y0-4&&ll[1]<=y1+4;const d=d3.geoDistance(ll,R.c);if(inBox&&d<bd){bd=d;best=k}}return best}
+function vis(ll){return true}
+function inRegion(ll){return region==="world"||regionOf(ll)===region}
+function regionOf(ll){let best="world",bd=1e9;for(const k of REGION_KEYS){const R=REGIONS[k];if(k==="world")continue;const [x0,y0,x1,y1]=R.box;let lon=ll[0];if(lon<x0)lon+=360;const inBox=lon>=x0-4&&lon<=x1+4&&ll[1]>=y0-4&&ll[1]<=y1+4;const d=d3.geoDistance(ll,R.c);if(inBox&&d<bd){bd=d;best=k}}return best}
 const seaRect=svg.append("rect").attr("class","sea");
 const gMap=svg.append("g");
 const gLand=gMap.append("g"), gPol=gMap.append("g"), gLake=gMap.append("g"), gRiv=gMap.append("g"), gGhost=gMap.append("g"), gModern=gMap.append("g"), gTex=gMap.append("g"), gJ=gMap.append("g");
@@ -47,16 +51,22 @@ const gOver=svg.append("g"), gLab=gOver.append("g"), gSites=gOver.append("g"), g
 const tip=d3.select("#tip");
 
 function boxPts(b){const [x0,y0,x1,y1]=b,pts=[];for(let x=x0;x<=x1;x+=1){pts.push([x,y0],[x,y1])}for(let y=y0;y<=y1;y+=1){pts.push([x0,y],[x1,y])}return {type:"MultiPoint",coordinates:pts}}
-function fitP(p,r){const R=REGIONS[r],pad=W()<760?6:40;const ext=[[W()>1100?pad+(R.pad||0):pad,W()<760?150:pad+30],[W()-pad,H()-(W()<760?190:130)]];p.fitExtent(ext,R.box?boxPts(R.box):{type:"Sphere"});return p}
+function viewExt(r){const pad=W()<760?6:40;return [[W()>1100&&r!=="world"?pad+150:pad,W()<760?150:pad+30],[W()-pad,H()-(W()<760?190:130)]]}
+// 某区域在当前底图坐标中的缩放变换
+function regionT(r){
+  const [[x0,y0],[x1,y1]]=path.bounds(boxPts(REGIONS[r].box)),[[a0,b0],[a1,b1]]=viewExt(r);
+  const k=Math.min((a1-a0)/(x1-x0),(b1-b0)/(y1-y0));
+  return d3.zoomIdentity.translate((a0+a1)/2,(b0+b1)/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2);
+}
 function fit(){
-  fitP(projection,region);
-  SF=projection.scale()/fitP(makeProj("europe"),"europe").scale();
+  projection.fitExtent(viewExt("world"),boxPts(REGIONS.world.box));
+  SF=1/regionT("europe").k;
   for(const k in labelCache)delete labelCache[k];
   svg.attr("width",W()).attr("height",H()); seaRect.attr("width",W()).attr("height",H());
 }
 
 let legT=null;
-const zoom=d3.zoom().scaleExtent([.7,40]).on("zoom",e=>{transform=e.transform;gMap.attr("transform",transform);placeOverlays()}).on("end",()=>{clearTimeout(legT);legT=setTimeout(()=>{if(curSnap!==null)buildLegend()},250)});
+const zoom=d3.zoom().scaleExtent([.8,120]).on("zoom",e=>{transform=e.transform;gMap.attr("transform",transform);placeOverlays()}).on("end",()=>{clearTimeout(legT);legT=setTimeout(()=>{if(curSnap!==null)buildLegend()},250)});
 svg.call(zoom).on("dblclick.zoom",null);
 
 // ---------- 数据加载 ----------
@@ -67,31 +77,28 @@ function ensureAll(){return ensure(SNAPS)}
 Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical.json?v="+(window.APP_V||""))]).then(([a,p])=>{
   IDXA=a; PHYS=p; SNAPS=a.snaps; ATLAS={data:SNAP_DATA};
   const h=decodeURIComponent(location.hash.slice(1));const m=h.match(/(?:^|-)r-([a-z]+)/);if(m&&REGIONS[m[1]])region=m[1];
-  projection=makeProj(region);path.projection(projection);
-  fit(); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
+  fit(); transform=regionT(region);svg.call(zoom.transform,transform); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
   d3.select("#loading").remove();
   d3.json("atlas/hist.json?v="+(window.APP_V||"")).then(h=>{HIST=h}).catch(()=>{});
 }).catch(e=>{d3.select("#loading").text(U.loadFail+e)});
 
-function setRegion(r,keepZoom){
-  if(!REGIONS[r]||r===region&&keepZoom)return;
-  region=r;projection=makeProj(r);path.projection(projection);fit();drawPhysical();renderSnap(true);
-  if(journey){gJ.selectAll("path.jpath").attr("d",p=>path({type:"LineString",coordinates:[p[0][2],p[1][2]]}))}
-  transform=d3.zoomIdentity;svg.call(zoom.transform,d3.zoomIdentity);
+function setRegion(r){
+  if(!REGIONS[r])return;
+  region=r;svg.transition().duration(900).call(zoom.transform,regionT(r));
   d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region});
-  placeOverlays();writeHash();
+  writeHash();
 }
 function buildRegionBar(){
   const b=d3.select("#regions");if(b.empty())return;b.html("");
   REGION_KEYS.forEach(k=>b.append("button").attr("data-r",k).classed("on",k===region).text(U.regions[k]).on("click",()=>{stopPlay();setRegion(k)}));
 }
-function ensureVisible(ll){if(ll&&!vis(ll))setRegion(regionOf(ll))}
+function ensureVisible(ll){if(ll&&region!=="world"&&regionOf(ll)!==region){region=regionOf(ll);d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region})}}
 
-window.addEventListener("resize",()=>{fit();drawPhysical();renderSnap(true);placeOverlays();buildTimeline()});
+window.addEventListener("resize",()=>{fit();transform=regionT(region);svg.call(zoom.transform,transform);drawPhysical();renderSnap(true);placeOverlays();buildTimeline()});
 
 function drawPhysical(){
   gLand.selectAll("*").remove();
-  if(region==="world")gLand.append("path").datum({type:"Sphere"}).attr("class","sphere").attr("d",path);
+
   gLand.append("path").datum(PHYS.land).attr("class","land").attr("d",path);
   gLand.append("path").datum(PHYS.land).attr("class","land").attr("d",path).attr("filter","url(#paperTex)").style("fill","#e9dcbf");
   gTex.selectAll("*").remove();
@@ -208,7 +215,7 @@ function hideTip(){tip.style("display","none")}
 // ---------- 图例 ----------
 function buildLegend(fs){
   fs=fs||feats(curSnap).filter(f=>f.properties.n&&f.properties.n.trim());
-  const t=transform,p=makeProj(region).scale(projection.scale()).translate(projection.translate()).clipExtent([[(0-t.x)/t.k,(0-t.y)/t.k],[(W()-t.x)/t.k,(H()-t.y)/t.k]]),pa=d3.geoPath(p);
+  const t=transform,p=makeProj().scale(projection.scale()).translate(projection.translate()).clipExtent([[(0-t.x)/t.k,(0-t.y)/t.k],[(W()-t.x)/t.k,(H()-t.y)/t.k]]),pa=d3.geoPath(p);
   const items=fs.filter(f=>!isTribal(f.properties.n)).map(f=>[f,pa.area(f)]).filter(x=>x[1]>40/t.k/t.k).sort((a,b)=>b[1]-a[1]).slice(0,18).map(x=>x[0]);
   const box=d3.select("#legItems").html("");
   items.forEach(f=>{
@@ -222,7 +229,7 @@ function buildLegend(fs){
 }
 function highlight(n){hoverName=n;gPol.selectAll("path.pol").classed("dim",d=>n&&d.properties.n!==n).classed("hi",d=>n&&d.properties.n===n);placeOverlays()}
 function focusFeature(f){const [[x0,y0],[x1,y1]]=path.bounds(f);flyBox(x0,y0,x1,y1)}
-function flyBox(x0,y0,x1,y1){const k=Math.min(8,.8/Math.max((x1-x0)/W(),(y1-y0)/(H()-140)));svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2,(H()-120)/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2))}
+function flyBox(x0,y0,x1,y1){const k=Math.min(8/SF,.8/Math.max((x1-x0)/W(),(y1-y0)/(H()-140)));svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2,(H()-120)/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2))}
 function flyTo(ll,k){ensureVisible(ll);const p=projection(ll);k=Math.max(k||transform.k,(k?2:2.4)/SF);const off=d3.select("#panel").classed("show")&&W()>760?-180:0;svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2+off,(H()-120)/2).scale(k).translate(-p[0],-p[1]))}
 function pulse(ll){ensureVisible(ll);gPulse.selectAll("*").remove();const c=gPulse.append("circle").attr("class","pulse").attr("data-ll",JSON.stringify(ll)).attr("r",4);placeOverlays();(function rep(){c.attr("r",4).style("opacity",1).transition().duration(1400).attr("r",26).style("opacity",0).on("end",rep)})()}
 
@@ -402,13 +409,13 @@ function endJourney(){journey=null;gJ.selectAll("*").remove();gJS.selectAll("*")
 // ---------- 古地名小试 ----------
 function quizPool(){
   const pool=[];
-  window.CITIES.filter(c=>vis(c.c)).forEach(c=>{const n=c.names[0];if(n[1].split(" ")[0]!==c.names[c.names.length-1][1].split(" ")[0]||c.names.length===1){const ev=c.ev.find(e=>e[0]>=n[0])||c.ev[0];pool.push({q:n[1],y:Math.max(MINY,ev?ev[0]:n[0]),clue:ev?ev[1]:"",ans:c.zh,c:c.c})}});
-  window.SITES.filter(s=>s.y<1900&&vis(s.c)).forEach(s=>pool.push({q:s.en&&IS_ZH?`${s.zh}（${s.en}）`:s.zh,y:s.y,clue:s.d,ans:s.zh,c:s.c}));
+  window.CITIES.filter(c=>inRegion(c.c)).forEach(c=>{const n=c.names[0];if(n[1].split(" ")[0]!==c.names[c.names.length-1][1].split(" ")[0]||c.names.length===1){const ev=c.ev.find(e=>e[0]>=n[0])||c.ev[0];pool.push({q:n[1],y:Math.max(MINY,ev?ev[0]:n[0]),clue:ev?ev[1]:"",ans:c.zh,c:c.c})}});
+  window.SITES.filter(s=>s.y<1900&&inRegion(s.c)).forEach(s=>pool.push({q:s.en&&IS_ZH?`${s.zh}（${s.en}）`:s.zh,y:s.y,clue:s.d,ans:s.zh,c:s.c}));
   return d3.shuffle(pool).slice(0,10);
 }
 function startQuiz(){
   endJourney();closePanelSilent();quiz={qs:quizPool(),i:0,score:0,pin:null,done:false};document.body.classList.add("quiz");
-  d3.selectAll(".tbtn[data-t=quiz]").classed("on",true);svg.transition().duration(700).call(zoom.transform,d3.zoomIdentity);quizShow();
+  d3.selectAll(".tbtn[data-t=quiz]").classed("on",true);svg.transition().duration(700).call(zoom.transform,regionT(region));quizShow();
 }
 function closePanelSilent(){d3.select("#panel").classed("show",false)}
 function quizShow(){
