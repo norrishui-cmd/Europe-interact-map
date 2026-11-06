@@ -1,10 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>欧陆时序 · 欧洲历史交互地图</title>
 <meta name="description" content="Interactive historical atlas of Europe, 500 BC – present: changing borders, city histories, battles, journeys and a place-name quiz. 欧洲历史交互地图。">
+<link rel="canonical" href="https://chronicamaps.com/">
+<meta property="og:url" content="https://chronicamaps.com/">
 <meta property="og:title" content="欧陆时序 · Chronica Europae">
 <meta property="og:description" content="Interactive historical atlas of Europe, 500 BC – present">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -208,7 +210,7 @@ body.latin #eras div{font-size:12px}
  var codes={zhs:"zh-Hans",zht:"zh-Hant",en:"en",de:"de",fr:"fr",es:"es"},inv={};for(var k in codes)inv[codes[k]]=k;
  var m=location.hash.match(/(?:^#|-)l-(zhs|zht|en|de|fr|es)(?:-|$)/),L=m?codes[m[1]]:null;
  if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
- if(!L||!inv[L]){var n=(navigator.language||"en").toLowerCase();L=/^zh-(tw|hk|mo|hant)/.test(n)?"zh-Hant":/^zh/.test(n)?"zh-Hans":/^de/.test(n)?"de":/^fr/.test(n)?"fr":/^es/.test(n)?"es":"en"}
+ if(!L||!inv[L]){L="en"}
  window.LANG=L;window.LANG_CODE=inv[L];window.LANG_CODES=inv;
  var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","content.hant.js","content_more.hant.js"]:L==="zh-Hans"?["polities.js","content.js","content_more.js"]:["polities.js","content.js","content_more.js","content_en.js","content_more_en.js"];
  f=f.concat(["localize.js","app.js"]);
