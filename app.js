@@ -1,8 +1,8 @@
-/* 欧陆时序 · Chronica Europae — 主程序 */
+/* 寰宇时序 · Chronica Mundi — 主程序 */
 (function(){
 const MINY=-500, MAXY=2026;
 const W=()=>window.innerWidth, H=()=>window.innerHeight;
-let ATLAS=null, PHYS=null, SNAPS=[], year=-27, curSnap=null, transform=d3.zoomIdentity;
+let ATLAS=null, PHYS=null, SNAPS=[], IDXA=null, HIST=null, region="europe", SF=1, year=-27, curSnap=null, transform=d3.zoomIdentity;
 const layers={cities:true,sites:true,landmarks:true,rivers:true,ghost:true,modern:false};
 let journey=null, jIdx=0, quiz=null, playing=null, hoverName=null;
 
@@ -15,7 +15,7 @@ const zhOf=n=>window.polName(n);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function hash(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)}
 function lineage(n){for(const L of window.LINEAGES) if(L[3].test(n)) return L; return null}
-function isTribal(n){return window.TRIBAL.test(n)}
+function isTribal(n){return window.TRIBAL.test(n)||!!(window.TRIBAL_SET&&window.TRIBAL_SET.has(n))}
 function colorOf(n){const L=lineage(n); if(L) return L[2]; if(isTribal(n)) return "#d6c6a0"; return window.FALLBACK_COLORS[hash(n)%window.FALLBACK_COLORS.length]}
 const cityById=Object.fromEntries(window.CITIES.map(c=>[c.id,c]));
 const siteById=Object.fromEntries(window.SITES.map(s=>[s.id,s]));
@@ -26,35 +26,72 @@ const tScale=d3.scaleLinear().domain([-500,0,1000,1500,1800,2026]).range([0,.17,
 
 // ---------- 投影与图层 ----------
 const svg=d3.select("#map");
-const projection=d3.geoAzimuthalEqualArea().rotate([-17,-53]).precision(.3);
+// 区域视图：欧洲 / 亚洲 / 非洲 / 大洋洲 / 世界
+const REGIONS={
+  europe:{c:[17,53],clip:68,box:[-24,35,58,71.5],pad:150},
+  asia:{c:[95,32],clip:68,box:[38,-6,146,56],pad:150},
+  africa:{c:[18,3],clip:68,box:[-19,-35,52,37.5],pad:150},
+  oceania:{c:[155,-22],clip:62,box:[112,-47,185,-1],pad:150},
+  world:{c:[11,0],clip:0,box:null,pad:0}
+};
+const REGION_KEYS=Object.keys(REGIONS);
+function makeProj(r){const R=REGIONS[r];return R.clip?d3.geoAzimuthalEqualArea().rotate([-R.c[0],-R.c[1]]).clipAngle(R.clip).precision(.3):d3.geoNaturalEarth1().rotate([-R.c[0],0]).precision(.3)}
+let projection=makeProj("europe");
 const path=d3.geoPath(projection);
+function vis(ll){const R=REGIONS[region];return !R.clip||d3.geoDistance(ll,R.c)<R.clip*Math.PI/180*.96}
+function regionOf(ll){let best="world",bd=1e9;for(const k of REGION_KEYS){const R=REGIONS[k];if(!R.clip)continue;const [x0,y0,x1,y1]=R.box;let lon=ll[0];if(lon<x0)lon+=360;const inBox=lon>=x0-4&&lon<=x1+4&&ll[1]>=y0-4&&ll[1]<=y1+4;const d=d3.geoDistance(ll,R.c);if(inBox&&d<bd){bd=d;best=k}}return best}
 const seaRect=svg.append("rect").attr("class","sea");
 const gMap=svg.append("g");
 const gLand=gMap.append("g"), gPol=gMap.append("g"), gLake=gMap.append("g"), gRiv=gMap.append("g"), gGhost=gMap.append("g"), gModern=gMap.append("g"), gTex=gMap.append("g"), gJ=gMap.append("g");
 const gOver=svg.append("g"), gLab=gOver.append("g"), gSites=gOver.append("g"), gLm=gOver.append("g"), gCities=gOver.append("g"), gJS=gOver.append("g"), gQuiz=gOver.append("g"), gPulse=gOver.append("g");
 const tip=d3.select("#tip");
 
+function boxPts(b){const [x0,y0,x1,y1]=b,pts=[];for(let x=x0;x<=x1;x+=1){pts.push([x,y0],[x,y1])}for(let y=y0;y<=y1;y+=1){pts.push([x0,y],[x1,y])}return {type:"MultiPoint",coordinates:pts}}
+function fitP(p,r){const R=REGIONS[r],pad=W()<760?6:40;const ext=[[W()>1100?pad+(R.pad||0):pad,W()<760?150:pad+30],[W()-pad,H()-(W()<760?190:130)]];p.fitExtent(ext,R.box?boxPts(R.box):{type:"Sphere"});return p}
 function fit(){
-  const pts=[];for(let x=-24;x<=58;x+=1){pts.push([x,35],[x,71.5])}for(let y=35;y<=71.5;y+=1){pts.push([-24,y],[58,y])}
-  const pad=W()<760?6:40;
-  projection.fitExtent([[W()>1100?pad+150:pad,W()<760?150:pad+30],[W()-pad,H()-(W()<760?190:130)]],{type:"MultiPoint",coordinates:pts});
+  fitP(projection,region);
+  SF=projection.scale()/fitP(makeProj("europe"),"europe").scale();
+  for(const k in labelCache)delete labelCache[k];
   svg.attr("width",W()).attr("height",H()); seaRect.attr("width",W()).attr("height",H());
 }
 
-const zoom=d3.zoom().scaleExtent([.7,14]).on("zoom",e=>{transform=e.transform;gMap.attr("transform",transform);placeOverlays()});
+let legT=null;
+const zoom=d3.zoom().scaleExtent([.7,40]).on("zoom",e=>{transform=e.transform;gMap.attr("transform",transform);placeOverlays()}).on("end",()=>{clearTimeout(legT);legT=setTimeout(()=>{if(curSnap!==null)buildLegend()},250)});
 svg.call(zoom).on("dblclick.zoom",null);
 
 // ---------- 数据加载 ----------
-Promise.all([d3.json("atlas.json"),d3.json("physical.json")]).then(([a,p])=>{
-  ATLAS=a; PHYS=p; SNAPS=a.snaps;
-  fit(); drawPhysical(); buildTimeline(); buildQuick(); readHash();
+// 边界数据按年份分片懒加载：atlas/index.json + atlas/<年份>.json
+const SNAP_DATA={}, SNAP_REQ={};
+function ensure(list){return Promise.all(list.filter(s=>s!==null&&s!==undefined).map(s=>{s=String(s);if(SNAP_DATA[s])return SNAP_DATA[s];return SNAP_REQ[s]||(SNAP_REQ[s]=d3.json(`atlas/${s}.json`).then(d=>{SNAP_DATA[s]=d;return d}))}))}
+function ensureAll(){return ensure(SNAPS)}
+Promise.all([d3.json("atlas/index.json"),d3.json("physical.json")]).then(([a,p])=>{
+  IDXA=a; PHYS=p; SNAPS=a.snaps; ATLAS={data:SNAP_DATA};
+  const h=decodeURIComponent(location.hash.slice(1));const m=h.match(/(?:^|-)r-([a-z]+)/);if(m&&REGIONS[m[1]])region=m[1];
+  projection=makeProj(region);path.projection(projection);
+  fit(); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
   d3.select("#loading").remove();
+  d3.json("atlas/hist.json").then(h=>{HIST=h}).catch(()=>{});
 }).catch(e=>{d3.select("#loading").text(U.loadFail+e)});
+
+function setRegion(r,keepZoom){
+  if(!REGIONS[r]||r===region&&keepZoom)return;
+  region=r;projection=makeProj(r);path.projection(projection);fit();drawPhysical();renderSnap(true);
+  if(journey){gJ.selectAll("path.jpath").attr("d",p=>path({type:"LineString",coordinates:[p[0][2],p[1][2]]}))}
+  transform=d3.zoomIdentity;svg.call(zoom.transform,d3.zoomIdentity);
+  d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region});
+  placeOverlays();writeHash();
+}
+function buildRegionBar(){
+  const b=d3.select("#regions");if(b.empty())return;b.html("");
+  REGION_KEYS.forEach(k=>b.append("button").attr("data-r",k).classed("on",k===region).text(U.regions[k]).on("click",()=>{stopPlay();setRegion(k)}));
+}
+function ensureVisible(ll){if(ll&&!vis(ll))setRegion(regionOf(ll))}
 
 window.addEventListener("resize",()=>{fit();drawPhysical();renderSnap(true);placeOverlays();buildTimeline()});
 
 function drawPhysical(){
   gLand.selectAll("*").remove();
+  if(region==="world")gLand.append("path").datum({type:"Sphere"}).attr("class","sphere").attr("d",path);
   gLand.append("path").datum(PHYS.land).attr("class","land").attr("d",path);
   gLand.append("path").datum(PHYS.land).attr("class","land").attr("d",path).attr("filter","url(#paperTex)").style("fill","#e9dcbf");
   gTex.selectAll("*").remove();
@@ -67,11 +104,18 @@ function drawPhysical(){
 function snapFor(y){let s=SNAPS[0];for(const v of SNAPS){if(v<=y)s=v}return s}
 function prevSnap(s){const i=SNAPS.indexOf(s);return i>0?SNAPS[i-1]:null}
 const labelCache={};
-function feats(s){return ATLAS.data[String(s)].features}
+function feats(s){const d=SNAP_DATA[String(s)];return d?d.features:[]}
 
+let wantSnap=null;
 function renderSnap(force){
   const s=snapFor(year);
   if(s===curSnap&&!force) return;
+  wantSnap=s;
+  if(!SNAP_DATA[String(s)]||(layers.ghost&&prevSnap(s)!==null&&!SNAP_DATA[String(prevSnap(s))])||(layers.modern&&!SNAP_DATA["2010"])){
+    d3.select("#snapInfo").text("…");
+    ensure([s,layers.ghost?prevSnap(s):null,layers.modern?2010:null]).then(()=>{if(wantSnap===s)renderSnap(true)});
+    return;
+  }
   curSnap=s;
   const fs=feats(s).filter(f=>f.properties.n&&f.properties.n.trim());
   gPol.selectAll("path.pol").data(fs,d=>d.properties.n).join(
@@ -91,6 +135,7 @@ function drawGhost(){
   gGhost.selectAll("*").remove();
   if(!layers.ghost) return;
   const p=prevSnap(curSnap); if(p===null) return;
+  if(!SNAP_DATA[String(p)]){ensure([p]).then(drawGhost);return}
   const cur=Object.fromEntries(feats(curSnap).map(f=>[f.properties.n,f.properties.a]));
   const g=feats(p).filter(f=>{const n=f.properties.n;if(!n||!cur[n]||isTribal(n))return false;return Math.abs(cur[n]-f.properties.a)/f.properties.a>.04});
   gGhost.selectAll("path").data(g).join("path").attr("class","ghost").attr("d",path);
@@ -98,6 +143,7 @@ function drawGhost(){
 function drawModern(){
   gModern.selectAll("*").remove();
   if(!layers.modern) return;
+  if(!SNAP_DATA["2010"]){ensure([2010]).then(drawModern);return}
   gModern.selectAll("path").data(feats(2010).filter(f=>f.properties.n)).join("path").attr("class","modern").attr("d",path);
 }
 
@@ -107,8 +153,8 @@ function computeLabels(s){
     labelCache[s]=feats(s).filter(f=>f.properties.n&&f.properties.n.trim()&&f.properties.a>1.2).map(f=>{
       let g=f.geometry, best=g;
       if(g.type==="MultiPolygon"){let ba=-1;for(const c of g.coordinates){const pg={type:"Polygon",coordinates:c};const a=d3.geoArea(pg);if(a>ba){ba=a;best=pg}}}
-      const c=path.centroid(best);
-      return {n:f.properties.n,a:f.properties.a,c,tribal:isTribal(f.properties.n)};
+      const c=path.centroid(best),g0=d3.geoCentroid(best);
+      return {n:f.properties.n,a:f.properties.a,c,ll:g0,tribal:isTribal(f.properties.n)};
     }).filter(d=>isFinite(d.c[0]));
   }
   placeOverlays();
@@ -117,16 +163,16 @@ function computeLabels(s){
 function nameAt(city,y){let nm=null;for(const n of city.names){if(n[0]<=y)nm=n}return nm}
 function placeOverlays(){
   if(!curSnap) return;
-  const k=transform.k, T=p=>transform.apply(p);
+  const k=transform.k*SF, T=p=>transform.apply(p);
   // 政权标签
-  const mob=W()<760?3:1;const labs=(labelCache[curSnap]||[]).filter(d=>d.a*k*k>(d.tribal?60:14)*mob);
+  const mob=W()<760?3:1;const labs=(labelCache[curSnap]||[]).filter(d=>d.a*k*k>(d.tribal?60:14)*mob&&vis(d.ll));
   const L=gLab.selectAll("text.plabel").data(labs,d=>d.n).join(en=>{const t=en.append("text").attr("class","plabel");t.append("tspan").attr("class","zh");t.append("tspan").attr("class","en").attr("x",0).attr("dy","1.15em");return t});
   L.attr("transform",d=>`translate(${T(d.c)})`).style("opacity",d=>d.tribal?.55:(hoverName&&hoverName!==d.n?.25:1))
    .style("font-size",d=>Math.max(W()<760?8:10,Math.min(26,(5+Math.sqrt(d.a)*1.05)*Math.sqrt(k)*(W()<760?.6:1)))+"px");
   L.select(".zh").text(d=>zhOf(d.n));
   L.select(".en").text(d=>d.a*k*k>120&&!d.tribal?window.secName(d.n):"").style("font-size","0.62em");
   // 城市
-  const cs=layers.cities?window.CITIES.filter(c=>{const n=nameAt(c,year);if(!n)return false;return c.r===1||(c.r===2&&k>=1.5)||(c.r===3&&k>=2.4)||(journey||0)}):[];
+  const cs=layers.cities?window.CITIES.filter(c=>{const n=nameAt(c,year);if(!n)return false;if(!vis(c.c))return false;return (c.r===1&&(k>=.55||c.w))||(c.r===2&&k>=1.5)||(c.r===3&&k>=2.4)||(journey||0)}):[];
   const C=gCities.selectAll("g.city").data(cs,d=>d.id).join(en=>{const g=en.append("g").attr("class","city");g.append("circle").attr("r",3.6);const t=g.append("text").attr("x",6).attr("y",4);t.append("tspan").attr("class","zh");t.append("tspan").attr("class","old");return g});
   C.attr("transform",d=>`translate(${T(projection(d.c))})`).classed("cap",d=>d.r===1)
    .on("click",(e,d)=>{e.stopPropagation();if(quiz)return;cityCard(d)})
@@ -134,14 +180,14 @@ function placeOverlays(){
   C.select(".zh").text(d=>d.zh);
   C.select(".old").text(d=>{const n=nameAt(d,year);const lat=n[1].replace(/[\u3000-\u303f\u4e00-\u9fff“”]+/g,"").trim().split(" / ")[0];return k>=1.3&&n!==d.names[d.names.length-1]&&lat!==d.zh?" "+lat:""}).attr("font-size","10px");
   // 战役名胜
-  const ss=layers.sites?window.SITES.filter(s=>s.y<=year+0||Math.abs(s.y-year)<=0):[];
+  const ss=layers.sites?window.SITES.filter(s=>(s.y<=year+0||Math.abs(s.y-year)<=0)&&vis(s.c)):[];
   const S=gSites.selectAll("g.site").data(ss.filter(s=>k>=1.25||Math.abs(s.y-year)<=30),d=>d.id).join(en=>{const g=en.append("g").attr("class",d=>"site"+(d.k==="site"?" siteK":""));g.append("path").attr("d",d=>d.k==="battle"?"M0,-6 L5,0 L0,6 L-5,0Z":"M-4.5,-4.5h9v9h-9z");g.append("text").attr("x",7).attr("y",4);return g});
   S.attr("transform",d=>`translate(${T(projection(d.c))})`).classed("now",d=>Math.abs(d.y-year)<=15).classed("past",d=>year-d.y>60)
    .on("click",(e,d)=>{e.stopPropagation();if(quiz)return;siteCard(d)})
    .on("mousemove",(e,d)=>showTip(e,`<b>${esc(d.zh)}</b> · ${fmtYFull(d.y)}<br><span class="en">${esc(d.en)}</span>`)).on("mouseleave",hideTip);
   S.select("text").text(d=>Math.abs(d.y-year)<=40||k>=2.2?`${d.zh}·${fmtY(d.y)}`:"");
   // 名胜古迹
-  const lms=layers.landmarks?(window.LANDMARKS||[]).filter(m=>m.y<=year||k>=2.4):[];
+  const lms=layers.landmarks&&k>=.6?(window.LANDMARKS||[]).filter(m=>(m.y<=year||k>=2.4)&&vis(m.c)):[];
   const M=gLm.selectAll("g.lm").data(lms,d=>d.id).join(en=>{const g=en.append("g").attr("class",d=>"lm st-"+d.st);g.append("path").attr("d","M-6,1L0,-6L6,1Z M-5,2h10v5h-10Z");g.append("text").attr("x",8).attr("y",4);return g});
   M.attr("transform",d=>`translate(${T(projection(d.c))})`).classed("future",d=>d.y>year)
    .on("click",(e,d)=>{e.stopPropagation();if(quiz)return;landmarkCard(d)})
@@ -161,7 +207,9 @@ function hideTip(){tip.style("display","none")}
 
 // ---------- 图例 ----------
 function buildLegend(fs){
-  const items=fs.filter(f=>!isTribal(f.properties.n)).slice(0,18);
+  fs=fs||feats(curSnap).filter(f=>f.properties.n&&f.properties.n.trim());
+  const t=transform,p=makeProj(region).scale(projection.scale()).translate(projection.translate()).clipExtent([[(0-t.x)/t.k,(0-t.y)/t.k],[(W()-t.x)/t.k,(H()-t.y)/t.k]]),pa=d3.geoPath(p);
+  const items=fs.filter(f=>!isTribal(f.properties.n)).map(f=>[f,pa.area(f)]).filter(x=>x[1]>40/t.k/t.k).sort((a,b)=>b[1]-a[1]).slice(0,18).map(x=>x[0]);
   const box=d3.select("#legItems").html("");
   items.forEach(f=>{
     const n=f.properties.n;
@@ -175,8 +223,8 @@ function buildLegend(fs){
 function highlight(n){hoverName=n;gPol.selectAll("path.pol").classed("dim",d=>n&&d.properties.n!==n).classed("hi",d=>n&&d.properties.n===n);placeOverlays()}
 function focusFeature(f){const [[x0,y0],[x1,y1]]=path.bounds(f);flyBox(x0,y0,x1,y1)}
 function flyBox(x0,y0,x1,y1){const k=Math.min(8,.8/Math.max((x1-x0)/W(),(y1-y0)/(H()-140)));svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2,(H()-120)/2).scale(k).translate(-(x0+x1)/2,-(y0+y1)/2))}
-function flyTo(ll,k){const p=projection(ll);k=k||Math.max(transform.k,2.4);const off=d3.select("#panel").classed("show")&&W()>760?-180:0;svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2+off,(H()-120)/2).scale(k).translate(-p[0],-p[1]))}
-function pulse(ll){gPulse.selectAll("*").remove();const c=gPulse.append("circle").attr("class","pulse").attr("data-ll",JSON.stringify(ll)).attr("r",4);placeOverlays();(function rep(){c.attr("r",4).style("opacity",1).transition().duration(1400).attr("r",26).style("opacity",0).on("end",rep)})()}
+function flyTo(ll,k){ensureVisible(ll);const p=projection(ll);k=Math.max(k||transform.k,(k?2:2.4)/SF);const off=d3.select("#panel").classed("show")&&W()>760?-180:0;svg.transition().duration(900).call(zoom.transform,d3.zoomIdentity.translate(W()/2+off,(H()-120)/2).scale(k).translate(-p[0],-p[1]))}
+function pulse(ll){ensureVisible(ll);gPulse.selectAll("*").remove();const c=gPulse.append("circle").attr("class","pulse").attr("data-ll",JSON.stringify(ll)).attr("r",4);placeOverlays();(function rep(){c.attr("r",4).style("opacity",1).transition().duration(1400).attr("r",26).style("opacity",0).on("end",rep)})()}
 
 // ---------- 时间轴 ----------
 const eventYears=()=>[...new Set([...window.EVENTS.map(e=>e[0]),...SNAPS])].sort((a,b)=>a-b);
@@ -241,8 +289,19 @@ function history(ll){
   for(let i=0;i<SNAPS.length;i++){const s=SNAPS[i];const n=polityAt(ll,s)||"";const last=rows[rows.length-1];if(last&&last.n===n){last.to=SNAPS[i+1]?SNAPS[i+1]-1:MAXY}else rows.push({n,from:s,to:SNAPS[i+1]?SNAPS[i+1]-1:MAXY})}
   return rows;
 }
-function historyTable(ll){
-  const rows=history(ll);
+function histRows(h){return h.map((r,i)=>({n:r[0],from:r[1],to:h[i+1]?h[i+1][1]-1:MAXY}))}
+function getHistory(ll,key){
+  const pre=()=>HIST&&key&&HIST[key]?histRows(HIST[key]):null;
+  const r=pre();if(r)return Promise.resolve(r);
+  return (key?d3.json("atlas/hist.json").then(h=>{HIST=h}).catch(()=>{}):Promise.resolve()).then(()=>pre()||ensureAll().then(()=>history(ll)));
+}
+let htSeq=0;
+function historyTable(ll,key){
+  const id="ht"+(++htSeq);
+  getHistory(ll,key).then(rows=>{const el=document.getElementById(id);if(el){el.outerHTML=histHTML(rows);bindYearLinks()}});
+  return `<div id="${id}"><div class="sec">${U.territory}</div><div style="color:#9a8a6a">…</div></div>`;
+}
+function histHTML(rows){
   return `<div class="sec">${U.territory}</div><table>${rows.map(r=>`<tr><td class="y" data-y="${r.from}">${fmtY(r.from)}–${r.to>=MAXY?U.now:fmtY(r.to)}</td><td>${r.n?`<span class="sw2" style="background:${colorOf(r.n)}"></span>${esc(zhOf(r.n))} <span class="latin" style="font-size:12px">${esc(window.secName(r.n))}</span>`:`<span style="color:#9a8a6a">${U.noData}</span>`}</td></tr>`).join("")}</table>`;
 }
 function nearbySites(ll,km){return window.SITES.filter(s=>d3.geoDistance(s.c,ll)*6371<km).sort((a,b)=>a.y-b.y)}
@@ -255,7 +314,7 @@ function cityCard(c){
   <div class="sec">${U.names}</div><table>${c.names.map(n=>`<tr><td class="y" data-y="${Math.max(MINY,n[0])}">${fill(U.since,{y:fmtY(n[0])})}</td><td><b>${esc(n[1])}</b>${n[2]?` · <span style="color:#7a6648">${esc(n[2])}</span>`:""}</td></tr>`).join("")}</table>
   <div class="sec">${U.events}</div><table>${evs.map(e=>`<tr><td class="y" data-y="${Math.max(MINY,e[0])}" data-ll='${JSON.stringify(c.c)}'>${fmtY(e[0])}</td><td>${esc(e[1])}</td></tr>`).join("")}</table>
   ${ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""}
-  ${historyTable(c.c)}`);
+  ${historyTable(c.c,"c-"+c.id)}`);
   flyTo(c.c);pulse(c.c);lastCard="c-"+c.id;writeHash();
 }
 function lmFig(img,label){
@@ -280,7 +339,7 @@ function landmarkCard(m){
 }
 function siteCard(s){
   stopPlay();setYear(s.y);
-  openPanel(`<h2>${esc(s.zh)}</h2><div class="latin">${esc(s.en)} · ${fmtYFull(s.y)}</div><div class="bio">${esc(s.d)}</div>${historyTable(s.c)}`);
+  openPanel(`<h2>${esc(s.zh)}</h2><div class="latin">${esc(s.en)} · ${fmtYFull(s.y)}</div><div class="bio">${esc(s.d)}</div>${historyTable(s.c,"s-"+s.id)}`);
   flyTo(s.c);pulse(s.c);lastCard="s-"+s.id;writeHash();
 }
 function nearestCity(ll){let best=null,bd=1e9;for(const c of window.CITIES){const d=d3.geoDistance(c.c,ll)*6371;if(d<bd){bd=d;best=c}}return [best,bd]}
@@ -298,9 +357,9 @@ function spotCard(ll){
 svg.on("dblclick",e=>{if(quiz)return;spotCard(projection.invert(transform.invert(d3.pointer(e))))});
 svg.on("click",e=>{if(quiz&&e.target.tagName!=="path")quizClick(e)});
 function polityCard(n){
-  const yrs=SNAPS.filter(s=>feats(s).some(f=>f.properties.n===n));
+  const AP=IDXA.appear,yrs=(AP[n]||[]).map(i=>SNAPS[i]);
   const L=lineage(n);
-  const sameL=L?SNAPS.map(s=>[s,feats(s).filter(f=>L[3].test(f.properties.n)).map(f=>f.properties.n)]).filter(x=>x[1].length):[];
+  const sameL=L?SNAPS.map((s,i)=>[s,Object.keys(AP).filter(m=>L[3].test(m)&&AP[m].includes(i))]).filter(x=>x[1].length):[];
   openPanel(`<h2>${esc(zhOf(n))}</h2><div class="latin">${esc(window.secName(n))}</div>
   ${L?`<div class="bio">${fill(U.lineage,{l:`<span class="sw2" style="background:${L[2]}"></span><b>${L[1]}</b>`})}</div>`:""}
   <div class="sec">${U.appears}</div><div>${yrs.map(y=>`<span class="chip" data-y="${y}">${fmtY(y)}</span>`).join(" ")}</div>
@@ -318,6 +377,7 @@ function startJourney(id){
   d3.selectAll(".tbtn[data-t=journey]").classed("on",true);
   gJ.selectAll("*").remove();gJS.selectAll("*").remove();
   const st=journey.stops;
+  ensureVisible(st[0][2]);
   gJ.selectAll("path").data(d3.pairs(st)).join("path").attr("class","jpath").attr("d",p=>path({type:"LineString",coordinates:[p[0][2],p[1][2]]}));
   const g=gJS.selectAll("g.jstop").data(st).join(en=>{const g=en.append("g").attr("class","jstop");g.append("circle").attr("r",6);g.append("text").attr("x",9).attr("y",-6);return g});
   g.select("text").text((d,i)=>`${i+1} ${d[1]}`);g.on("click",(e,d)=>{e.stopPropagation();jGo(st.indexOf(d))});
@@ -342,8 +402,8 @@ function endJourney(){journey=null;gJ.selectAll("*").remove();gJS.selectAll("*")
 // ---------- 古地名小试 ----------
 function quizPool(){
   const pool=[];
-  window.CITIES.forEach(c=>{const n=c.names[0];if(n[1].split(" ")[0]!==c.names[c.names.length-1][1].split(" ")[0]||c.names.length===1){const ev=c.ev.find(e=>e[0]>=n[0])||c.ev[0];pool.push({q:n[1],y:Math.max(MINY,ev?ev[0]:n[0]),clue:ev?ev[1]:"",ans:c.zh,c:c.c})}});
-  window.SITES.filter(s=>s.y<1900).forEach(s=>pool.push({q:s.en&&IS_ZH?`${s.zh}（${s.en}）`:s.zh,y:s.y,clue:s.d,ans:s.zh,c:s.c}));
+  window.CITIES.filter(c=>vis(c.c)).forEach(c=>{const n=c.names[0];if(n[1].split(" ")[0]!==c.names[c.names.length-1][1].split(" ")[0]||c.names.length===1){const ev=c.ev.find(e=>e[0]>=n[0])||c.ev[0];pool.push({q:n[1],y:Math.max(MINY,ev?ev[0]:n[0]),clue:ev?ev[1]:"",ans:c.zh,c:c.c})}});
+  window.SITES.filter(s=>s.y<1900&&vis(s.c)).forEach(s=>pool.push({q:s.en&&IS_ZH?`${s.zh}（${s.en}）`:s.zh,y:s.y,clue:s.d,ans:s.zh,c:s.c}));
   return d3.shuffle(pool).slice(0,10);
 }
 function startQuiz(){
@@ -401,7 +461,7 @@ function buildIndex(){
   window.RULERS.forEach(R=>R.list.forEach(r=>IDX.push({k:r[2]+" "+R.t,label:r[2],tag:`${R.t} · ${fmtY(r[0])}–${fmtY(r[1])}`,go:()=>{setYear(r[0]);writeHash()}})));
   window.EVENTS.forEach(e=>IDX.push({k:e[1]+" "+(e._k||""),label:e[1],tag:U.tagEvent+" · "+fmtY(e[0]),go:()=>gotoEvent(e)}));
   window.ERAS.forEach(e=>IDX.push({k:e[2],label:e[2],tag:`${U.tagEra} · ${fmtY(e[0])}–${fmtY(e[1])}`,go:()=>{setYear(e[0]+1);writeHash()}}));
-  const seen=new Set();SNAPS.forEach(s=>feats(s).forEach(f=>{const n=f.properties.n;if(!n||!n.trim()||seen.has(n))return;seen.add(n);IDX.push({k:zhOf(n)+" "+n+" "+(window.POLITY_ZH[n]||""),label:zhOf(n),tag:U.tagPolity+" · "+window.secName(n),go:()=>{const y=SNAPS.find(v=>feats(v).some(g=>g.properties.n===n));setYear(y);const ff=feats(y).find(g=>g.properties.n===n);focusFeature(ff);polityCard(n);writeHash()}})}));
+  Object.keys(IDXA.appear).forEach(n=>{if(!n.trim())return;IDX.push({k:zhOf(n)+" "+n+" "+(window.POLITY_ZH[n]||""),label:zhOf(n),tag:U.tagPolity+" · "+window.secName(n),go:()=>{const y=SNAPS[IDXA.appear[n][0]];setYear(y);ensure([y]).then(()=>{const ff=feats(y).find(g=>g.properties.n===n);if(ff){const ll=d3.geoCentroid(ff);ensureVisible(ll);focusFeature(ff)}polityCard(n);writeHash()})}})});
 }
 function yearQuery(q){const m=q.match(/^(公元前|前|bc|-|ad|公元)?\s*(\d{1,4})\s*(年|bc|b\.c\.|v\.?\s*chr\.?|av\.?\s*j\.?-?c\.?|a\.?\s*c\.?|ad|n\.?\s*chr\.?|apr\.?\s*j\.?-?c\.?|d\.?\s*c\.?)?$/i);if(!m)return null;let y=+m[2];if(/^(公元前|前|bc|-)$/i.test(m[1]||"")||/^(bc|b\.c\.|v|av|a\.?\s*c)/i.test(m[3]||""))y=-y;return y>=MINY&&y<=MAXY?y:null}
 let selI=0,cur=[];
@@ -427,7 +487,7 @@ document.addEventListener("keydown",e=>{
 
 // ---------- 链接锚点：#y1453 / #yBC52 / #y1415-c-paris / #p-napoleon / #quiz ----------
 let lastCard="";
-function writeHash(){if(quiz)return;const yh=year<0?`yBC${-year}`:`y${year}`;let h=yh;if(journey)h=`p-${journey.id}`;else if(d3.select("#panel").classed("show")&&lastCard)h+=`-${lastCard}`;h+=`-l-${window.LANG_CODE}`;try{history_.replaceState(null,"","#"+h)}catch(e){}}
+function writeHash(){if(quiz)return;const yh=year<0?`yBC${-year}`:`y${year}`;let h=yh;if(journey)h=`p-${journey.id}`;else if(d3.select("#panel").classed("show")&&lastCard)h+=`-${lastCard}`;if(region!=="europe")h+=`-r-${region}`;h+=`-l-${window.LANG_CODE}`;try{history_.replaceState(null,"","#"+h)}catch(e){}}
 const history_=window.history;
 function readHash(){
   const h=decodeURIComponent(location.hash.slice(1));
@@ -435,7 +495,7 @@ function readHash(){
   if(/^quiz/.test(h))return startQuiz();
   m=h.match(/(?:^|-)p-([a-z]+)/);if(m)return startJourney(m[1]);
   m=h.match(/(?:^|-)c-([a-z0-9]+)/);if(m&&cityById[m[1]]){const y=year;cityCard(cityById[m[1]]);setYear(y);return}
-  m=h.match(/(?:^|-)m-([a-z0-9-]+?)(?:-l-|$)/);if(m&&window.LANDMARKS){const o=window.LANDMARKS.find(x=>x.id===m[1]);if(o)return landmarkCard(o)}
+  m=h.match(/(?:^|-)m-([a-z0-9-]+?)(?:-[rl]-|$)/);if(m&&window.LANDMARKS){const o=window.LANDMARKS.find(x=>x.id===m[1]);if(o)return landmarkCard(o)}
   m=h.match(/(?:^|-)s-([a-z0-9]+)/);if(m&&siteById[m[1]])return siteCard(siteById[m[1]]);
 }
 window.addEventListener("hashchange",()=>{if(ATLAS)readHash()});
