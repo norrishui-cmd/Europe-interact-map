@@ -45,7 +45,7 @@ const zoom=d3.zoom().scaleExtent([.7,14]).on("zoom",e=>{transform=e.transform;gM
 svg.call(zoom).on("dblclick.zoom",null);
 
 // ---------- 数据加载 ----------
-Promise.all([d3.json("data/atlas.json"),d3.json("data/physical.json")]).then(([a,p])=>{
+Promise.all([d3.json("atlas.json"),d3.json("physical.json")]).then(([a,p])=>{
   ATLAS=a; PHYS=p; SNAPS=a.snaps;
   fit(); drawPhysical(); buildTimeline(); buildQuick(); readHash();
   d3.select("#loading").remove();
