@@ -446,6 +446,9 @@ const SKIP = new Set(['build.mjs', 'package.json', 'package-lock.json', 'vercel.
 for (const f of fs.readdirSync(ROOT)) if (!SKIP.has(f) && !f.startsWith('.') && fs.statSync(path.join(ROOT, f)).isFile()) fs.copyFileSync(path.join(ROOT, f), path.join(OUT, f));
 const write = (rel, data) => { const p = path.join(OUT, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
 for (const p of pages) write(p.url + '.html', p.html);
+// cache-busting: stamp script URLs in the app shell with this build's version
+const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
+write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/__V__/g, VER));
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
 for (const k of NEED) { const [r, s] = k.split('|'); write(mapUrl(+s, r).slice(1), mapSVG(+s, r)); }
 // split border data for the app: index + one file per snapshot + precomputed "who ruled here"

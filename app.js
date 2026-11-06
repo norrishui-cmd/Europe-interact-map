@@ -62,15 +62,15 @@ svg.call(zoom).on("dblclick.zoom",null);
 // ---------- 数据加载 ----------
 // 边界数据按年份分片懒加载：atlas/index.json + atlas/<年份>.json
 const SNAP_DATA={}, SNAP_REQ={};
-function ensure(list){return Promise.all(list.filter(s=>s!==null&&s!==undefined).map(s=>{s=String(s);if(SNAP_DATA[s])return SNAP_DATA[s];return SNAP_REQ[s]||(SNAP_REQ[s]=d3.json(`atlas/${s}.json`).then(d=>{SNAP_DATA[s]=d;return d}))}))}
+function ensure(list){return Promise.all(list.filter(s=>s!==null&&s!==undefined).map(s=>{s=String(s);if(SNAP_DATA[s])return SNAP_DATA[s];return SNAP_REQ[s]||(SNAP_REQ[s]=d3.json(`atlas/${s}.json?v=${window.APP_V||""}`).then(d=>{SNAP_DATA[s]=d;return d}))}))}
 function ensureAll(){return ensure(SNAPS)}
-Promise.all([d3.json("atlas/index.json"),d3.json("physical.json")]).then(([a,p])=>{
+Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical.json?v="+(window.APP_V||""))]).then(([a,p])=>{
   IDXA=a; PHYS=p; SNAPS=a.snaps; ATLAS={data:SNAP_DATA};
   const h=decodeURIComponent(location.hash.slice(1));const m=h.match(/(?:^|-)r-([a-z]+)/);if(m&&REGIONS[m[1]])region=m[1];
   projection=makeProj(region);path.projection(projection);
   fit(); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
   d3.select("#loading").remove();
-  d3.json("atlas/hist.json").then(h=>{HIST=h}).catch(()=>{});
+  d3.json("atlas/hist.json?v="+(window.APP_V||"")).then(h=>{HIST=h}).catch(()=>{});
 }).catch(e=>{d3.select("#loading").text(U.loadFail+e)});
 
 function setRegion(r,keepZoom){
@@ -293,7 +293,7 @@ function histRows(h){return h.map((r,i)=>({n:r[0],from:r[1],to:h[i+1]?h[i+1][1]-
 function getHistory(ll,key){
   const pre=()=>HIST&&key&&HIST[key]?histRows(HIST[key]):null;
   const r=pre();if(r)return Promise.resolve(r);
-  return (key?d3.json("atlas/hist.json").then(h=>{HIST=h}).catch(()=>{}):Promise.resolve()).then(()=>pre()||ensureAll().then(()=>history(ll)));
+  return (key?d3.json("atlas/hist.json?v="+(window.APP_V||"")).then(h=>{HIST=h}).catch(()=>{}):Promise.resolve()).then(()=>pre()||ensureAll().then(()=>history(ll)));
 }
 let htSeq=0;
 function historyTable(ll,key){

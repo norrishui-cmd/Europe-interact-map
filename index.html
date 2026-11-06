@@ -229,17 +229,17 @@ body.latin #eras div{font-size:12px}
  <div id="track"><div id="eras"></div><div id="ticks"></div><div id="axis"></div><div id="knob"></div></div>
 </div>
 <div id="tip"></div>
-<script src="i18n.js"></script>
+<script src="i18n.js?v=__V__"></script>
 <script>
 (function(){
  var codes={zhs:"zh-Hans",zht:"zh-Hant",en:"en",de:"de",fr:"fr",es:"es"},inv={};for(var k in codes)inv[codes[k]]=k;
  var m=location.hash.match(/(?:^#|-)l-(zhs|zht|en|de|fr|es)(?:-|$)/),L=m?codes[m[1]]:null;
  if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
  if(!L||!inv[L]){L="en"}
- window.LANG=L;window.LANG_CODE=inv[L];window.LANG_CODES=inv;
+ window.APP_V="__V__";window.LANG=L;window.LANG_CODE=inv[L];window.LANG_CODES=inv;
  var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_en.js","content_more_en.js","content_world_en.js"];f.push("landmarks.js");
  f=f.concat(["localize.js","app.js"]);
- (function next(i){if(i>=f.length)return;var s=document.createElement("script");s.src=f[i];s.onload=function(){next(i+1)};document.body.appendChild(s)})(0);
+ (function next(i){if(i>=f.length)return;var s=document.createElement("script");s.src=f[i]+"?v=__V__";s.onload=function(){next(i+1)};document.body.appendChild(s)})(0);
 })();
 </script>
 </body>
