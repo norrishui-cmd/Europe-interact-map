@@ -241,7 +241,6 @@ ${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/page.css">
 ${lds}
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9505220977121599"\n     crossorigin="anonymous"></script>
 </head>
 <body>
 <header class="top"><a class="brand" href="/"><span class="seal">C</span>Chronica Maps</a><nav>${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join('')}<a class="cta" href="/">Interactive map →</a></nav></header>
