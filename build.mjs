@@ -11,6 +11,8 @@ const SITE = 'https://chronicamaps.com';
 const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
 const TODAY = new Date().toISOString().slice(0, 10);
 const R_KM = 6371;
+const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: 'https://chronicamaps.com', logo: 'https://chronicamaps.com/favicon.svg' };
+const fdate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 // ---------- load content (same files the app uses) ----------
 const ctx = { window: {} };
@@ -84,6 +86,7 @@ const PEOPLE = (W.PEOPLE || []).map(p => ({ ...p, name: p.n.en, role: p.r.en, bi
   .map(p => ({ ...p, ll: p.c || (p.cities[0] && p.cities[0].c), place: p.pl ? p.pl.en : (p.cities[0] && p.cities[0].name) }));
 const lifeY = p => `${p.ca ? 'c. ' : ''}${fy(p.y[0])} – ${fy(p.y[1])}`;
 const peopleIn = id => PEOPLE.filter(p => p.at.includes(id)).sort((a, b) => a.y[0] - b.y[0]);
+const further = q => `<h2>Further reading</h2><ul class="links"><li><a href="https://www.britannica.com/search?query=${encodeURIComponent(q)}" rel="nofollow">${esc(q)} in Encyclopaedia Britannica</a></li><li><a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(q)}&amp;go=Go" rel="nofollow">${esc(q)} on Wikipedia</a></li></ul>`;
 const alive = (a, b) => PEOPLE.filter(p => p.y[0] <= b && p.y[1] >= a);
 const pTable = list => table(['Lived', 'Person', ''], list.map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]));
 const pBlock = (h, list, n = 12) => list.length ? `<h2>${h}</h2>${pTable(list.slice(0, n))}${list.length > n ? `<p><a href="/en/people">All ${PEOPLE.length} people</a></p>` : ''}` : '';
@@ -126,6 +129,8 @@ const PROJ = PROJS.europe, P = PATHS.europe, path0 = () => P;
 function regionOf(ll) { let best = 'world', bd = 1e9; for (const [k, R] of Object.entries(REGIONS)) { if (!R.clip) continue; const [x0, y0, x1, y1] = R.box; let lon = ll[0]; if (lon < x0) lon += 360; const inBox = lon >= x0 - 4 && lon <= x1 + 4 && ll[1] >= y0 - 4 && ll[1] <= y1 + 4; const d = geoDistance(ll, R.c); if (inBox && d < bd) { bd = d; best = k; } } return best; }
 const regionOfAll = lls => { const rs = new Set(lls.map(regionOf)); return rs.size === 1 ? [...rs][0] : 'world'; };
 const pt = (ll, r = 'europe') => { const p = PROJS[r](ll); return { x: +(p[0] / 12).toFixed(2), y: +(p[1] / 8).toFixed(2) }; }; // % of 1200×800
+const imgSlug = (s, r = 'europe') => (r === 'world' ? `world-map-in-${yearSlug(s)}` : `map-of-${r === 'americas' ? 'the-americas' : r}-in-${yearSlug(s)}`);
+const imgUrl = (s, r = 'europe') => `/maps/img/${imgSlug(s, r)}.webp`;
 const mapUrl = (s, r = 'europe') => (r === 'europe' ? `/maps/${yearSlug(s)}.svg` : `/maps/${r}/${yearSlug(s)}.svg`);
 const NEED = new Set();
 // area of each named, non-tribal state per snapshot (km²) — for "what changed" sections
@@ -216,7 +221,7 @@ function mapSVG(s, r = 'europe') {
 }
 
 // ---------- page template ----------
-const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Countries', '/en/countries'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
@@ -226,7 +231,10 @@ function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogTy
   if (EXTRA[url]) body += EXTRA[url];
   if (EXTRA_LD[url]) ld = [...ld, ...EXTRA_LD[url]];
   body = body.replace(/<!--EMBED:([^>]*)-->/, (_, h) => embedBox(h, url, h1.replace(/&amp;/g, '&').replace(/<[^>]+>/g, ''))).replace(/<!--EMBED:[^>]*-->/g, '');
-  if (!ogImage) { const m = body.match(/src="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
+  if (!ogImage) { const m = body.match(/data-svg="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
+  const imgs = [...new Set([...body.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"[^>]*alt="([^"]*)"/g)].map(m => m[1] + '|' + m[2]))];
+  if (imgs.length) ld = [...ld, ...imgs.map(x => { const [u, alt] = x.split('|'); return { '@context': 'https://schema.org', '@type': 'ImageObject', contentUrl: SITE + u, name: alt.replace(/&amp;/g, '&'), creditText: 'Chronica Maps', creator: ORG, copyrightNotice: 'Chronica Maps; border data historical-basemaps (GPL-3.0), Natural Earth', license: 'https://www.gnu.org/licenses/gpl-3.0.html', acquireLicensePage: SITE + '/about#using-and-citing-the-maps' }; })];
+  if (!noindex) ld = [...ld, { '@context': 'https://schema.org', '@type': 'WebPage', url: SITE + url, name: title, dateModified: TODAY, inLanguage: 'en', isPartOf: { '@type': 'WebSite', name: 'Chronica Maps', url: SITE }, publisher: ORG }];
   if (!ogImage) ogImage = '/og/world-1500.jpg';
   const ogAbs = ogImage ? (/^https?:/.test(ogImage) ? ogImage : SITE + ogImage) : '';
   const bc = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c[0], item: SITE + c[1] })) };
@@ -258,13 +266,14 @@ ${lds}
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((c, i) => (i < crumbs.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a>` : `<span>${esc(c[0])}</span>`)).join(' › ')}</nav>
 <h1>${h1}</h1>
 ${body}
+${noindex || tool ? '' : `<p class="updated muted">Last updated ${fdate(TODAY)}. Sources: border data from <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a>, land and rivers from Natural Earth; texts written for Chronica Maps from standard reference works. <a href="/about#sources-and-method">How we make the maps</a>.</p>`}
 ${featAside(url)}
 </main>${tool ? `\n<script>window.APP_V="${VER}"</script><script src="/vendor/d3.min.js"></script><script src="/tools.js?v=${VER}"></script>` : ''}
 <footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth.</p><p><a href="/about">About</a> · <a href="/guide">How to use the map</a> · <a href="/en/topics">Featured topics</a> · <a href="/en/anniversaries/${new Date().getUTCFullYear()}">Anniversaries</a></p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
 </body>
 </html>`;
 }
-const mapBlock = (s, alt, overlay = '', r = 'europe') => { NEED.add(`${r}|${s}`); return `<figure class="map"><div class="mapwrap"><img src="${mapUrl(s, r)}" width="1200" height="800" alt="${esc(alt)}" loading="eager" decoding="async">${overlay}</div><figcaption>Border map for ${fy(s)}. ${r === 'europe' ? `<a href="/en/year/${yearSlug(s)}">See Europe in ${fy(s)}</a>` : `<a href="/en/world/${yearSlug(s)}">See the world in ${fy(s)}</a>`}.</figcaption></figure>`; };
+const mapBlock = (s, alt, overlay = '', r = 'europe') => { NEED.add(`${r}|${s}`); return `<figure class="map"><div class="mapwrap"><img src="${imgUrl(s, r)}" data-svg="${mapUrl(s, r)}" width="1200" height="800" alt="${esc(alt)}" loading="eager" decoding="async">${overlay}</div><figcaption>Border map for ${fy(s)}. ${r === 'europe' ? `<a href="/en/year/${yearSlug(s)}">See Europe in ${fy(s)}</a>` : `<a href="/en/world/${yearSlug(s)}">See the world in ${fy(s)}</a>`}.</figcaption></figure>`; };
 const pin = (ll, label, r = 'europe') => { const p = pt(ll, r); return `<span class="pin" style="left:${p.x}%;top:${p.y}%"><span>${esc(label)}</span></span>`; };
 const openBtn = (h, label) => `<p><a class="btn" href="/#${h}-l-en">${esc(label)}</a></p><!--EMBED:${h}-->`;
 // copyable iframe code; the credit line under the map links back to the page
@@ -354,7 +363,7 @@ for (const c of CITIES) {
     if (st.length) qa.push([`Which states have ruled ${c.name}?`, `On the historical border maps from ${fy(SNAPS[0])} to today, ${c.name} lies within ${st.length} different state${st.length > 1 ? 's' : ''}: ${st.slice(0, 10).join(', ')}${st.length > 10 ? ' and others' : ''}.`]);
     if (c.ev.length) qa.push([`What are the key dates in the history of ${c.name}?`, c.ev.slice(0, 5).map(e => `${fy(e.y)}: ${e.t}`).join('. ') + '.']);
     if (pp.length) qa.push([`Which famous people are connected with ${c.name}?`, pp.slice(0, 6).map(p => `${p.name} (${p.role.toLowerCase()}, ${lifeY(p)})`).join('; ') + '.']);
-    EXTRA[`/en/city/${c.id}`] = `<h2>Questions about ${esc(c.name)}</h2>${qa.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`;
+    EXTRA[`/en/city/${c.id}`] = further(`${c.name} history`) + `<h2>Questions about ${esc(c.name)}</h2>${qa.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`;
     EXTRA_LD[`/en/city/${c.id}`] = [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qa.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }]; }
   const mid = c.ev.length ? c.ev[Math.floor(c.ev.length / 2)].y : 1500;
   const s = snapFor(Math.max(-500, mid)), rows = ruledBy(c.c), ns = nearSites(c.c), nc = nearCities(c.c);
@@ -382,7 +391,7 @@ ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a hre
 
 // ---------- battle / site pages ----------
 for (const x of SITES) {
-  EXTRA[`/en/battle/${x.id}`] = pBlock(`Who was alive at the time`, alive(x.y, x.y).filter(p => p.ll && geoDistance(p.ll, x.c) * R_KM < 2500).sort((a, b) => geoDistance(a.ll, x.c) - geoDistance(b.ll, x.c)), 8);
+  EXTRA[`/en/battle/${x.id}`] = further(x.title) + pBlock(`Who was alive at the time`, alive(x.y, x.y).filter(p => p.ll && geoDistance(p.ll, x.c) * R_KM < 2500).sort((a, b) => geoDistance(a.ll, x.c) - geoDistance(b.ll, x.c)), 8);
   const s = snapFor(Math.max(-500, x.y)), held = polityAt(x.c, s), nc = nearCities(x.c, 1)[0];
   const ctxEv = EVENTS.filter(e => Math.abs(e.y - x.y) <= 5 && e.place !== x.id && (!e.ll || regionOf(e.ll) === regionOf(x.c))).sort((a, b) => a.y - b.y), rul = rulersAt(x.y, regionOf(x.c)), ns = nearSites(x.c, 300, x.id);
   const body = `<p class="lead">${esc(x.d)}</p>
@@ -476,6 +485,7 @@ for (const m of LMS) {
   const s = snapFor(Math.max(-500, m.y)), nc = nearCities(m.c, 1)[0], rows = ruledBy(m.c);
   const near = lmNear(m.c, 500, m.id).slice(0, 6), ns = nearSites(m.c, 150);
   const alt1 = `${m.name}, ${THEN[m.st].toLowerCase()}`, alt2 = `${m.name}, ${NOW[m.st].toLowerCase()}`;
+  EXTRA[`/en/landmark/${m.id}`] = further(m.name);
   const body = `<p class="lead">${esc(m.d.en)}</p>
 <div class="lmgal">${fig(m.img.then, THEN[m.st], alt1)}${fig(m.img.now, NOW[m.st], alt2)}</div>
 <h2>Key facts</h2>
@@ -651,6 +661,60 @@ hub('/en/journeys', 'Historical Journeys on a Map: Routes and Timelines', 'Histo
 hub('/en/eras', 'Eras of History by Region: Maps and Timelines', 'Eras of History', `${ALL_ERAS.length} periods of history in Europe, Asia, Africa, the Americas and Oceania, each with its maps, events and battles.`,
   ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<h2>${RNAME(r)}</h2>` + table(['Era', 'Period'], ALL_ERAS.filter(e => e.region === r).map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`]))).join(''), 'Eras');
 
+// ---------- modern countries: who ruled the land of today's states ----------
+const CNAME = { 'Zaire': 'Democratic Republic of the Congo', 'Tanzania, United Republic of': 'Tanzania', 'Russia': 'Russia', 'United States': 'United States', 'Myanmar': 'Myanmar', 'Korea, Republic of': 'South Korea', "Korea, Democratic People's Republic of": 'North Korea', 'Iran, Islamic Republic of': 'Iran', 'Syrian Arab Republic': 'Syria', 'Viet Nam': 'Vietnam', 'Lao People\'s Democratic Republic': 'Laos', 'Libyan Arab Jamahiriya': 'Libya', 'Czech Republic': 'Czech Republic', 'Macedonia': 'North Macedonia', 'Moldova, Republic of': 'Moldova', 'Ivory Coast': "Côte d'Ivoire", 'Swaziland': 'Eswatini', 'Burma': 'Myanmar' };
+const COUNTRY_PAGES = [];
+{
+  const t0 = Date.now();
+  for (const f of feats(2010)) {
+    const raw = (f.properties.n || '').trim(); if (!raw || raw === 'Antarctica' || isTribal(raw)) continue;
+    const name = CNAME[raw] || polName(raw), b = f._b, pts = [];
+    const cities = CITIES.filter(c => inB(b, c.c) && geoContains(f, c.c));
+    if (f.properties.a < 3 && !cities.length) continue;
+    const w = b[1][0] - b[0][0] < 0 ? b[1][0] + 360 - b[0][0] : b[1][0] - b[0][0], h = b[1][1] - b[0][1];
+    for (let k = 7; pts.length < 30 && k <= 40; k += 6) { pts.length = 0; for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) { const ll = [((b[0][0] + (i + .5) * w / k + 540) % 360) - 180, b[0][1] + (j + .5) * h / k]; if (geoContains(f, ll)) pts.push(ll); } }
+    const sample = [...cities.map(c => c.c), ...pts].slice(0, 48); if (sample.length < 3) continue;
+    const rows = SNAPS.map(sn => { const cnt = new Map(); let none = 0; for (const ll of sample) { const n = polityAt(ll, sn); if (n && !isTribal(n)) cnt.set(n, (cnt.get(n) || 0) + 1); else none++; }
+      return { s: sn, top: [...cnt].sort((a, b) => b[1] - a[1]).map(([n, c]) => ({ n, share: c / sample.length })), none: none / sample.length }; });
+    const all = new Map(); for (const r of rows) for (const t of r.top) all.set(t.n, (all.get(t.n) || 0) + t.share);
+    const states = [...all].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+    if (states.length < 3) continue;
+    COUNTRY_PAGES.push({ raw, name, slug: slug(name), f, cities, rows, states, ll: geoCentroid(f) });
+  }
+  console.log(`countries: ${COUNTRY_PAGES.length} in ${Math.round((Date.now() - t0) / 1000)} s`);
+}
+const pct = x => `${Math.round(x * 100)}%`;
+for (const C of COUNTRY_PAGES) {
+  const url = `/en/country/${C.slug}`, rg = regionOf(C.ll), inC = ll => inB(C.f._b, ll) && geoContains(C.f, ll);
+  const people = PEOPLE.filter(p => (p.c && inC(p.c)) || p.cities.some(c => C.cities.includes(c))).sort((a, b) => a.y[0] - b.y[0]);
+  const sites = SITES.filter(x => inC(x.c)).sort((a, b) => a.y - b.y), lms = LMS.filter(m => inC(m.c));
+  const big = C.states.slice(0, 6).map(polName), st = stateUrl(C.raw);
+  const at = y => { const r = C.rows.find(r => r.s === snapFor(y)); return r && r.top[0] ? polName(r.top[0].n) : null; };
+  const lead = `The land of today's ${C.name} appears on ${SNAPS.length} historical border maps from ${fy(SNAPS[0])} to today. Over that time it was held, in whole or in part, by ${C.states.length} different states, among them ${big.slice(0, 5).join(', ')}.`;
+  const qa = [[`Which empires and states ruled the territory of ${C.name}?`, `On the border maps from ${fy(SNAPS[0])} to today, the largest shares of the territory of modern ${C.name} belonged to ${big.join(', ')}${C.states.length > 6 ? `, along with ${C.states.length - 6} other states` : ''}.`],
+    ...[1000, 1500, 1900].filter(y => at(y)).map(y => [`What was ${C.name} part of in ${y}?`, `On the border map for ${fy(snapFor(y))}, most of the territory of today's ${C.name} lay within ${at(y)}.`])];
+  const mapS = [snapFor(1000), snapFor(1700)];
+  const body = `<p class="lead">${esc(lead)}</p>
+${mapBlock(mapS[1], `Map of ${RNAME(rg)} in ${fy(mapS[1])}, showing the lands of today's ${C.name}`, pin(C.ll, C.name, rg), rg)}
+${openBtn(`${hashYear(mapS[1])}${rg === 'europe' ? '' : `-r-${rg}`}`, `Explore the history of ${C.name} in the interactive map`)}
+<p><a href="/compare#${rg}-${mapS[0]}-2010">Compare ${fy(mapS[0])} with today</a>${st ? ` · <a href="${st}">${esc(C.name)} as a state on the map</a>` : ''}</p>
+<h2>Who ruled the land of ${esc(C.name)}, map by map</h2>
+<p class="muted">Share of sample points inside today's borders held by each state on each map. Areas with no organised state on the map are left out.</p>
+${table(['Map', 'Main states on this land'], C.rows.filter(r => r.top.length).map(r => [`<a href="${rg === 'europe' ? '/en/year/' : '/en/world/'}${yearSlug(r.s)}">${fy(r.s)}</a>`, r.top.slice(0, 3).map(t => `${stLink(t.n)} <span class="muted">${pct(t.share)}</span>`).join(' · ')]))}
+${C.cities.length ? `<h2>Historic cities in ${esc(C.name)}</h2><ul class="links cols">${C.cities.map(c => `<li><a href="/en/city/${c.id}">${esc(c.name)}</a></li>`).join('')}</ul>` : ''}
+${pBlock(`Famous people of ${esc(C.name)}`, people, 16)}
+${sites.length ? `<h2>Battles and historic sites</h2>${table(['Year', 'Battle or site'], sites.map(x => [fy(x.y), `<a href="/en/battle/${x.id}">${esc(x.title)}</a>`]))}` : ''}
+${lms.length ? `<h2>Landmarks</h2><ul class="lmgrid">${lms.map(lmCard).join('')}</ul>` : ''}
+${faq(qa)}
+${further(`History of ${C.name}`)}`;
+  add(url, page({ url, title: [`History of ${C.name} on the Map: Who Ruled Its Lands`, `${C.name} History Map: Who Ruled Its Lands`, `History of ${C.name} on the Map`].find(t => t.length <= 62) || `${C.name}: History Map`,
+    desc: cut(`${lead} See every map from ${fy(SNAPS[0])} to today, with its cities, people and battles.`), h1: `${esc(C.name)} Through History: Who Ruled Its Lands`,
+    crumbs: [['Home', '/'], ['Countries', '/en/countries'], [C.name, url]], body,
+    ld: [faqLd(qa), { '@context': 'https://schema.org', '@type': 'Article', headline: `${C.name} Through History`, about: { '@type': 'Country', name: C.name }, dateModified: TODAY, author: ORG, publisher: ORG }] }));
+}
+hub('/en/countries', 'History of Every Country on the Map: Who Ruled Its Lands', 'Countries Through History', `${COUNTRY_PAGES.length} modern countries, each with the empires and states that held its land on every map from ${fy(SNAPS[0])} to today, plus its historic cities, people and battles.`,
+  byRegion([...COUNTRY_PAGES].sort((a, b) => a.name.localeCompare(b.name)), c => c.ll).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : RNAME(r)}</h2><ul class="links cols">${list.map(c => `<li><a href="/en/country/${c.slug}">${esc(c.name)}</a></li>`).join('')}</ul>`).join(''), 'Countries');
+
 // ---------- people ----------
 for (const p of PEOPLE) {
   const url = `/en/person/${p.id}`, clampY = y => Math.max(-500, Math.min(2025, y)), mid = clampY(Math.round((p.y[0] + p.y[1]) / 2));
@@ -671,6 +735,7 @@ ${p.y[0] < -500 ? `<p class="muted">${esc(p.name)} lived before the earliest bor
 ${rule.length ? `<h2>Who ruled these places in ${her} lifetime</h2>${table([`Place`, `At birth (map of ${fy(sb)})`, `At death (map of ${fy(sd)})`], rule)}<p class="muted">From the border maps nearest to each date; borders are approximate.</p>` : ''}
 ${evs.length ? `<h2>Events in ${her} lifetime</h2>${table(['Year', 'Event', 'Where'], evs.sort((a, b) => parseInt(a[0]) - parseInt(b[0])))}` : ''}
 ${sites.length ? `<h2>Battles and sites of the time</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
+${further(p.name)}
 ${cont.length ? `<h2>Contemporaries</h2>${table(['Lived', 'Person', ''], cont.map(q => [lifeY(q), `<a href="/en/person/${q.id}">${esc(q.name)}</a>`, esc(q.role)]))}` : ''}`;
   const ld = { '@context': 'https://schema.org', '@type': 'Person', name: p.name, alternateName: p.n.zh, description: p.bio, jobTitle: p.role, url: SITE + url };
   if (p.y[0] > 0 && !p.ca) ld.birthDate = String(p.y[0]).padStart(4, '0');
@@ -685,8 +750,6 @@ hub('/en/people', 'Famous People in History: Lives on the Map', 'Famous People i
 
 // ---------- about, guide, featured topics, anniversaries ----------
 const md = t => esc(t).replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, '<a href="$2">$1</a>');
-const fdate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: SITE, logo: SITE + '/favicon.svg' };
 add('/about', page({ url: '/about', title: 'About Chronica Maps: An Interactive Historical Atlas', ogType: 'website',
   desc: 'Chronica Maps is a free interactive atlas of world history: 2,500 years of borders, cities, battles, landmarks, journeys and trade routes. Sources, methods and how to cite.',
   h1: 'About Chronica Maps', crumbs: [['Home', '/'], ['About', '/about']],
@@ -694,12 +757,17 @@ add('/about', page({ url: '/about', title: 'About Chronica Maps: An Interactive 
 <h2>What the atlas contains</h2>
 <ul class="links"><li><a href="/en/world">${SNAPS.length} border maps</a> from ${fy(SNAPS[0])} to ${fy(SNAPS.at(-1))}</li><li><a href="/en/cities">${CITIES.length} historic cities</a> with timelines and the states that ruled them</li><li><a href="/en/battles">${SITES.length} battles and historic sites</a> and ${EVENTS.length} dated events</li><li><a href="/en/landmarks">${LMS.length} landmarks</a> shown then and now</li><li><a href="/en/journeys">${JOURNEYS.length} journeys</a> and <a href="/en/routes">${ROUTES.length} trade routes</a></li><li><a href="/en/towns">${TOWN_PAGES.length} town histories</a>, and a search over ${TOWNS.t.length.toLocaleString('en-US')} towns</li><li>Five free <a href="/tools">tools</a>: a daily puzzle, a two-year comparison, town history, true size of empires and border animations</li></ul>
 <p>The interface is available in English, German, French, Spanish and Chinese (simplified and traditional).</p>
-<h2>Sources and method</h2>
+<h2 id="sources-and-method">Sources and method</h2>
 <p>State borders come from the open <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> dataset (GPL-3.0), with some names corrected where a snapshot used a state that did not yet exist or no longer existed. Coastlines, lakes and rivers come from <a href="https://www.naturalearthdata.com/">Natural Earth</a>, and town positions from Natural Earth populated places. Landmark photographs come from Wikimedia Commons; each image is credited with its author and licence on its page.</p>
 <p>The texts on cities, battles, landmarks and routes are written for this atlas and summarise standard reference works.</p>
+<h2 id="how-the-content-is-made">How the content is made</h2>
+<p>Every city, battle, person and landmark text is written for this atlas from standard reference works and checked against at least one general reference, such as Encyclopaedia Britannica or Wikipedia, which each page links under Further reading. Dates follow the most widely accepted convention; where historians disagree or a date is traditional, the page says so or marks it with “c.”. The tables of rulers and “who ruled here” are calculated from the border maps, not typed by hand, so they change whenever the map data is corrected.</p>
+<p>The English pages are the reference version. The German, French and Spanish texts inside the interactive map are machine translations of the English and may contain errors; the Chinese texts were written separately.</p>
+<h2 id="corrections">Corrections</h2>
+<p>History maps are never finished. When an error is found, the data is corrected at the source and every page that uses it is rebuilt; the date at the foot of each page shows when it was last rebuilt.</p>
 <h2>How accurate are the borders?</h2>
 <p>Every map is a snapshot of one year, and the gaps between snapshots can be long. Pre-modern borders were rarely fixed lines: many areas were contested, held through tributaries, or not governed by any state at all. Treat the borders as schematic approximations. Where a place lies near a frontier, the atlas may assign it to a neighbouring state. If you spot an error, the dataset is open and corrections are welcome.</p>
-<h2>Using and citing the maps</h2>
+<h2 id="using-and-citing-the-maps">Using and citing the maps</h2>
 <p>You may link to any page and embed the interactive map on blogs, course sites and school pages with the embed code shown under each map; please keep the credit line. Animations made with the <a href="/animate">animation tool</a> are free to share with the chronicamaps.com credit visible.</p>
 <p>Suggested citation: <i>Chronica Maps: Interactive Historical Atlas</i>, ${SITE}, accessed [date].</p>
 <h2>Credits</h2>
@@ -783,12 +851,15 @@ try {
   const FD = path.join(ROOT, 'node_modules/dejavu-fonts-ttf/ttf/');
   const fontOpts = { fontFiles: [FD + 'DejaVuSerif.ttf', FD + 'DejaVuSerif-Bold.ttf'], loadSystemFonts: false, defaultFontFamily: 'DejaVu Serif', serifFamily: 'DejaVu Serif' };
   fs.mkdirSync(path.join(OUT, 'og'), { recursive: true });
+  fs.mkdirSync(path.join(OUT, 'maps/img'), { recursive: true });
   let n = 0;
   for (const [k, svg] of SVGS) {
     const [r, s] = k.split('|'), title = r === 'world' ? `The world in ${fy(+s)}` : `${r === 'americas' ? 'The Americas' : REGIONS[r].name} in ${fy(+s)}`;
     const inner = svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
     const og = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><svg width="1200" height="630" viewBox="0 85 1200 630" preserveAspectRatio="xMidYMid slice">${inner}</svg><rect y="540" width="1200" height="90" fill="#2b2118" fill-opacity=".9"/><text x="40" y="598" font-family="DejaVu Serif" font-weight="bold" font-size="42" fill="#f6e9cf">${esc(title)}</text><text x="1160" y="597" text-anchor="end" font-family="DejaVu Serif" font-size="26" fill="#e3c9a0">chronicamaps.com</text></svg>`;
     const png = new Resvg(og, { font: fontOpts }).render().asPng();
+    const full = svg.replace(/<\/svg>\s*$/, `<rect x="760" y="770" width="440" height="30" fill="#efe4cb" opacity=".8"/><text x="1188" y="791" text-anchor="end" font-family="DejaVu Serif" font-size="15" fill="#3a2a1a">${esc(title)} · chronicamaps.com</text></svg>`);
+    await sharp(new Resvg(full, { font: fontOpts }).render().asPng()).webp({ quality: 76 }).toFile(path.join(OUT, imgUrl(+s, r).slice(1)));
     await sharp(png).jpeg({ quality: 78, mozjpeg: true }).toFile(path.join(OUT, ogUrl(+s, r).slice(1)));
     n++;
   }
@@ -822,7 +893,8 @@ write('assets/page.css', fs.readFileSync(path.join(ROOT, 'page.css'), 'utf8'));
 write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#a8322a"/><text x="32" y="45" text-anchor="middle" font-family="Georgia,serif" font-size="40" font-weight="700" fill="#f6e9cf">C</text></svg>`);
 const urls = ['/', ...pages.filter(p => !p.noSitemap).map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
-const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
+for (const p of pages) { const l = [...new Set([...p.html.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"/g)].map(m => m[1]))]; if (l.length) IMGS[p.url] = [...(IMGS[p.url] || []), ...l.map(u => ({ t960: SITE + u }))]; }
+const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(country|city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
 const smGroups = {}; for (const u of urls) (smGroups[SECT(u)] ||= []).push(u);
 for (const [g, list] of Object.entries(smGroups)) write(`sitemap-${g}.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${list.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Object.keys(smGroups).map(g => `  <sitemap><loc>${SITE}/sitemap-${g}.xml</loc><lastmod>${TODAY}</lastmod></sitemap>`).join('\n')}\n</sitemapindex>\n`);
