@@ -21,8 +21,9 @@ if(!zh){
   window.SITES.forEach(s=>{s._k=s.zh+" "+s.en;const nm=di!==undefined&&P[s.id]?P[s.id][di]:s.en;s.d=E.sites[s.id]||s.d;s.en=nm===s.en?"":s.en;s.zh=nm});
   window.EVENTS.forEach((e,i)=>{e._k=e[1];e[1]=E.events[i]||e[1]});
   window.ERAS.forEach((e,i)=>{e[2]=di!==undefined?window.ERA_NAMES[i][di]:E.eras[i][0];e[3]=E.eras[i][1]});
+  for(const r in (window.REGION_ERAS||{}))window.REGION_ERAS[r].forEach((e,i)=>{e[2]=di!==undefined?window.REGION_ERA_NAMES[r][i][di]:E.regionEras[r][i][0];e[3]=E.regionEras[r][i][1]});
   window.RULERS.forEach(R=>{R.t=di!==undefined?window.REALM_NAMES[R.k][di]:E.rulersT[R.k];R.list.forEach((r,i)=>{r[2]=E.rulers[R.k][i]||r[2]})});
-  window.JOURNEYS.forEach(j=>{const e=E.journeys[j.id];j._k=j.zh+" "+j.who;j.who=strip(j.who.replace(/“[^”]*”/g,""));j.zh=di!==undefined?window.JOURNEY_NAMES[j.id][di]:e.t;
+  window.JOURNEYS.forEach(j=>{const e=E.journeys[j.id];j._k=j.zh+" "+j.who;j.who=strip(j.who.replace(/“[^”]*”/g,"")).replace(/^[\s·]+/,"");j.zh=di!==undefined?window.JOURNEY_NAMES[j.id][di]:e.t;
     j.span=j.span.replace(/前 (\d+)/g,(m,y)=>U.yShort(-y));j.stops.forEach((s,i)=>{s[1]=e.stops[i][0];s[3]=e.stops[i][1]})});
   window.LINEAGES.forEach(x=>{x[1]=window.LINEAGE_NAMES[x[0]][li]});
 }

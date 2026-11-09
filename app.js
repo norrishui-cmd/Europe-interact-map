@@ -32,6 +32,7 @@ const REGIONS={
   europe:{c:[17,53],box:[-24,34,58,71.5]},
   asia:{c:[95,32],box:[34,-8,148,56]},
   africa:{c:[18,3],box:[-19,-35,52,37.5]},
+  americas:{c:[-80,15],box:[-126,-56,-34,62]},
   oceania:{c:[155,-22],box:[110,-48,182,0]},
   world:{c:[11,0],box:[-168.9,-57,190.9,84]}
 };
@@ -84,7 +85,7 @@ Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical
 
 function setRegion(r){
   if(!REGIONS[r])return;
-  region=r;svg.transition().duration(900).call(zoom.transform,regionT(r));
+  region=r;onRegionChange();svg.transition().duration(900).call(zoom.transform,regionT(r));
   d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region});
   writeHash();
 }
@@ -92,7 +93,7 @@ function buildRegionBar(){
   const b=d3.select("#regions");if(b.empty())return;b.html("");
   REGION_KEYS.forEach(k=>b.append("button").attr("data-r",k).classed("on",k===region).text(U.regions[k]).on("click",()=>{stopPlay();setRegion(k)}));
 }
-function ensureVisible(ll){if(ll&&region!=="world"&&regionOf(ll)!==region){region=regionOf(ll);d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region})}}
+function ensureVisible(ll){if(ll&&region!=="world"&&regionOf(ll)!==region){region=regionOf(ll);onRegionChange();d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region})}}
 
 window.addEventListener("resize",()=>{fit();transform=regionT(region);svg.call(zoom.transform,transform);drawPhysical();renderSnap(true);placeOverlays();buildTimeline()});
 
@@ -234,11 +235,22 @@ function flyTo(ll,k){ensureVisible(ll);const p=projection(ll);k=Math.max(k||tran
 function pulse(ll){ensureVisible(ll);gPulse.selectAll("*").remove();const c=gPulse.append("circle").attr("class","pulse").attr("data-ll",JSON.stringify(ll)).attr("r",4);placeOverlays();(function rep(){c.attr("r",4).style("opacity",1).transition().duration(1400).attr("r",26).style("opacity",0).on("end",rep)})()}
 
 // ---------- 时间轴 ----------
+// 时代与君主随区域切换：欧洲与全球用欧洲时代，其他区域用各自的时代划分
+const curEras=()=>(window.REGION_ERAS&&window.REGION_ERAS[region])||window.ERAS;
+const REALM_REG={persia:["europe","asia"],mac:["europe","asia"],rome:["europe","africa","world"],byz:["europe","world"],ottoman:["europe","asia","africa","world"],rus:["europe","asia"],eng:["europe","oceania","world"],spain:["europe","americas"],portugal:["europe","americas"],france:["europe","africa"]};
+const WORLD_ORDER=["china","rome","byz","caliph","mongol","ottoman","eng","usa"];
+function realmsFor(r){
+  const list=window.RULERS.filter(R=>(R.reg||REALM_REG[R.k]||["europe"]).includes(r));
+  return r==="world"?list.sort((a,b)=>(WORLD_ORDER.indexOf(a.k)+99)%99-(WORLD_ORDER.indexOf(b.k)+99)%99):list;
+}
+let tlRegion=null;
+function onRegionChange(){if(tlRegion!==region){buildTimeline()}}
 const eventYears=()=>[...new Set([...window.EVENTS.map(e=>e[0]),...SNAPS])].sort((a,b)=>a-b);
 function buildTimeline(){
   const tr=document.getElementById("track"), w=tr.clientWidth;
   const er=d3.select("#eras").html(""), shades=["#e3cfa3","#d9c290"];
-  window.ERAS.forEach((e,i)=>{const x0=tScale(e[0])*w,x1=tScale(e[1])*w;er.append("div").style("left",x0+"px").style("width",(x1-x0)+"px").style("background",shades[i%2]).attr("title",e[2]+U.colon+e[3]).text(x1-x0>46?e[2]:"")});
+  tlRegion=region;
+  curEras().forEach((e,i)=>{const x0=tScale(e[0])*w,x1=tScale(e[1])*w;er.append("div").style("left",x0+"px").style("width",(x1-x0)+"px").style("background",shades[i%2]).attr("title",e[2]+U.colon+e[3]).text(x1-x0>46?e[2]:"")});
   const tk=d3.select("#ticks").html("");
   window.EVENTS.forEach(e=>tk.append("i").style("left",tScale(e[0])*w+"px").attr("title",`${fmtYFull(e[0])} · ${e[1]}`).on("click",ev=>{ev.stopPropagation();gotoEvent(e)}));
   const ax=d3.select("#axis").html("");
@@ -261,10 +273,10 @@ function setYear(y,force){
   d3.select("#yearEra").text(y<0?U.bc:U.ad);
   d3.select("#knob").style("left",tScale(y)*document.getElementById("track").clientWidth+"px");
   // 君主
-  const rs=[];for(const R of window.RULERS){for(const r of R.list){if(r[0]<=y&&y<=r[1]){rs.push(`<span class="r">${R.t}${U.colon}<b>${esc(r[2])}</b> <small>${fmtY(r[0])}–${fmtY(r[1])}</small></span>`);break}}}
+  const rs=[];for(const R of realmsFor(region)){for(const r of R.list){if(r[0]<=y&&y<=r[1]){rs.push(`<span class="r">${R.t}${U.colon}<b>${esc(r[2])}</b> <small>${fmtY(r[0])}–${fmtY(r[1])}</small></span>`);break}}}
   d3.select("#rulers").html(rs.slice(0,4).join(""));
   // 时代
-  const era=window.ERAS.find(e=>y>=e[0]&&y<e[1])||window.ERAS[window.ERAS.length-1];
+  const ER=curEras(),era=ER.find(e=>y>=e[0]&&y<e[1])||ER[ER.length-1];
   const evs=window.EVENTS.filter(e=>e[0]===y);
   d3.select("#era").html(`<b>${era[2]}</b>${evs.length?evs.map(e=>esc(e[1])).join(IS_ZH?"；":"; "):esc(era[3])}`);
   if(ATLAS){renderSnap(force);placeOverlays()}
@@ -355,7 +367,7 @@ function spotCard(ll){
   const [c,d]=nearestCity(ll);
   if(d<35*(3/Math.max(1,transform.k)))return cityCard(c);
   const n=polityAt(ll,curSnap);
-  openPanel(`<h2>${U.spot}</h2><div class="latin">${ll[1].toFixed(2)}°N, ${ll[0].toFixed(2)}°E</div>
+  openPanel(`<h2>${U.spot}</h2><div class="latin">${Math.abs(ll[1]).toFixed(2)}°${ll[1]<0?"S":"N"}, ${Math.abs(ll[0]).toFixed(2)}°${ll[0]<0?"W":"E"}</div>
    <div class="bio">${fill(U.spotText,{y:fmtYFull(year),p:n?esc(zhOf(n)):U.gap,c:`<a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a>`,d:Math.round(d)})}</div>
    ${(()=>{const ns=nearbySites(ll,150);return ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""})()}
    ${historyTable(ll)}`);
@@ -468,6 +480,7 @@ function buildIndex(){
   window.RULERS.forEach(R=>R.list.forEach(r=>IDX.push({k:r[2]+" "+R.t,label:r[2],tag:`${R.t} · ${fmtY(r[0])}–${fmtY(r[1])}`,go:()=>{setYear(r[0]);writeHash()}})));
   window.EVENTS.forEach(e=>IDX.push({k:e[1]+" "+(e._k||""),label:e[1],tag:U.tagEvent+" · "+fmtY(e[0]),go:()=>gotoEvent(e)}));
   window.ERAS.forEach(e=>IDX.push({k:e[2],label:e[2],tag:`${U.tagEra} · ${fmtY(e[0])}–${fmtY(e[1])}`,go:()=>{setYear(e[0]+1);writeHash()}}));
+  for(const r in (window.REGION_ERAS||{}))window.REGION_ERAS[r].forEach(e=>IDX.push({k:e[2]+" "+U.regions[r],label:e[2],tag:`${U.tagEra} · ${U.regions[r]} · ${fmtY(e[0])}–${fmtY(e[1])}`,go:()=>{setRegion(r);setYear(e[0]+1);writeHash()}}));
   Object.keys(IDXA.appear).forEach(n=>{if(!n.trim())return;IDX.push({k:zhOf(n)+" "+n+" "+(window.POLITY_ZH[n]||""),label:zhOf(n),tag:U.tagPolity+" · "+window.secName(n),go:()=>{const y=SNAPS[IDXA.appear[n][0]];setYear(y);ensure([y]).then(()=>{const ff=feats(y).find(g=>g.properties.n===n);if(ff){const ll=d3.geoCentroid(ff);ensureVisible(ll);focusFeature(ff)}polityCard(n);writeHash()})}})});
 }
 function yearQuery(q){const m=q.match(/^(公元前|前|bc|-|ad|公元)?\s*(\d{1,4})\s*(年|bc|b\.c\.|v\.?\s*chr\.?|av\.?\s*j\.?-?c\.?|a\.?\s*c\.?|ad|n\.?\s*chr\.?|apr\.?\s*j\.?-?c\.?|d\.?\s*c\.?)?$/i);if(!m)return null;let y=+m[2];if(/^(公元前|前|bc|-)$/i.test(m[1]||"")||/^(bc|b\.c\.|v|av|a\.?\s*c)/i.test(m[3]||""))y=-y;return y>=MINY&&y<=MAXY?y:null}

@@ -154,7 +154,7 @@ body.latin #eras div{font-size:12px}
 #tip{position:fixed;pointer-events:none;background:#2b2117;color:#f6eedb;font-size:12px;padding:5px 8px;border-radius:3px;z-index:20;display:none;max-width:280px;line-height:1.5}
 #tip .en{font-family:var(--latin);font-style:italic;opacity:.8}
 #regions{display:flex;gap:3px;margin:0 0 8px;flex-wrap:wrap}
-#regions button{font:inherit;font-size:12px;padding:2px 8px;border:1px solid #c9b48a;background:rgba(255,250,238,.7);color:var(--ink2);border-radius:3px;cursor:pointer}
+#regions button{font:inherit;font-size:11.5px;padding:2px 6px;border:1px solid #c9b48a;background:rgba(255,250,238,.7);color:var(--ink2);border-radius:3px;cursor:pointer}
 #regions button.on{background:var(--seal);color:#f6e9cf;border-color:var(--seal)}
 .sphere{fill:none;stroke:#8a7a5a;stroke-width:1}
 #explore{position:fixed;right:14px;bottom:150px;z-index:4;font-size:12.5px;background:rgba(246,238,219,.92);padding:3px 9px;border-radius:3px;border:1px solid #c9b48a}
@@ -237,7 +237,7 @@ body.latin #eras div{font-size:12px}
  if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
  if(!L||!inv[L]){L="en"}
  window.APP_V="__V__";window.LANG=L;window.LANG_CODE=inv[L];window.LANG_CODES=inv;
- var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_en.js","content_more_en.js","content_world_en.js"];f.push("landmarks.js");
+ var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js","content_world2.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_en.js","content_more_en.js","content_world_en.js","content_world2_en.js"];f.push("landmarks.js");
  f=f.concat(["localize.js","app.js"]);
  (function next(i){if(i>=f.length)return;var s=document.createElement("script");s.src=f[i]+"?v=__V__";s.onload=function(){next(i+1)};document.body.appendChild(s)})(0);
 })();

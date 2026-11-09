@@ -1,7 +1,7 @@
 window.UI["zh-Hant"]={"title":"寰宇時序",
 "seal":"寰<br>宇",
 "sub":"Chronica Mundi · 500 BC – Present",
-"regions":{"europe":"歐洲","asia":"亞洲","africa":"非洲","oceania":"大洋洲","world":"全球"},
+"regions":{"europe":"歐洲","asia":"亞洲","africa":"非洲","americas":"美洲","oceania":"大洋洲","world":"全球"},
 "search":"搜城市、戰役、人物、君主、年份…（按 / 喚起）",
 "t_journey":"人物行跡 ▾",
 "t_cities":"城市",

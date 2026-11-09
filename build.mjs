@@ -14,7 +14,7 @@ const R_KM = 6371;
 // ---------- load content (same files the app uses) ----------
 const ctx = { window: {} };
 vm.createContext(ctx);
-for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'landmarks.js']) {
+for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_world2.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'content_world2_en.js', 'landmarks.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window, E = W.CONTENT_EN;
@@ -27,6 +27,7 @@ for (const s of SNAPS) for (const f of feats(s)) { const b = geoBounds(f); f._b 
 const inB = (b, ll) => { if (ll[1] < b[0][1] - 0.5 || ll[1] > b[1][1] + 0.5) return false; const x0 = b[0][0], x1 = b[1][0]; if (x0 <= x1) return ll[0] >= x0 - 0.5 && ll[0] <= x1 + 0.5; return ll[0] >= x0 - 0.5 || ll[0] <= x1 + 0.5; };
 
 // ---------- helpers ----------
+const fmtLL = (c, d = 2) => `${Math.abs(c[1]).toFixed(d)}° ${c[1] < 0 ? 'S' : 'N'}, ${Math.abs(c[0]).toFixed(d)}° ${c[0] < 0 ? 'W' : 'E'}`;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fy = y => (y < 0 ? `${-y} BC` : y < 1000 ? `AD ${y}` : `${y}`);
 const fyShort = y => (y < 0 ? `${-y} BC` : `${y}`);
@@ -66,7 +67,9 @@ function ruledBy(ll) {
   });
   return rows;
 }
-const rulersAt = y => W.RULERS.map(R => { const i = R.list.findIndex(r => r[0] <= y && y <= r[1]); return i < 0 ? null : { realm: E.rulersT[R.k], name: E.rulers[R.k][i], from: R.list[i][0], to: R.list[i][1] }; }).filter(Boolean);
+const REALM_REG = { persia: ['europe', 'asia'], mac: ['europe', 'asia'], rome: ['europe', 'africa', 'world'], byz: ['europe', 'world'], ottoman: ['europe', 'asia', 'africa', 'world'], rus: ['europe', 'asia'], eng: ['europe', 'oceania', 'world'], spain: ['europe', 'americas'], france: ['europe', 'africa'] };
+const realmIn = (R, r) => (R.reg || REALM_REG[R.k] || ['europe']).includes(r);
+const rulersAt = (y, r = 'europe') => W.RULERS.filter(R => realmIn(R, r)).map(R => { const i = R.list.findIndex(r => r[0] <= y && y <= r[1]); return i < 0 ? null : { realm: E.rulersT[R.k], name: E.rulers[R.k][i], from: R.list[i][0], to: R.list[i][1] }; }).filter(Boolean);
 
 // ---------- English data ----------
 const CITIES = W.CITIES.map(c => {
@@ -80,7 +83,10 @@ const SITE_TITLE = { peipus: 'Battle on the Ice (Lake Peipus)', normandy: 'Norma
 const SITES = W.SITES.map(s => ({ id: s.id, en: s.en, c: s.c, y: s.y, k: s.k, d: E.sites[s.id],
   title: SITE_TITLE[s.id] || (s.k === 'battle' ? (s.en.startsWith('Battle') ? s.en : `Battle of ${THE.has(s.en) ? 'the ' : ''}${s.en}`) : s.en) }));
 const EVENTS = W.EVENTS.map((e, i) => ({ y: e[0], t: E.events[i], place: e[2], ll: e[2] ? (W.CITIES.find(c => c.id === e[2]) || W.SITES.find(s => s.id === e[2])).c : e[3] }));
-const ERAS = W.ERAS.map((e, i) => ({ from: e[0], to: e[1], name: E.eras[i][0], desc: E.eras[i][1], slug: slug(E.eras[i][0]) }));
+const ERAS = W.ERAS.map((e, i) => ({ from: e[0], to: e[1], name: E.eras[i][0], desc: E.eras[i][1], slug: slug(E.eras[i][0]), region: 'europe' }));
+const RERAS = Object.entries(W.REGION_ERAS || {}).flatMap(([r, list]) => list.map((e, i) => ({ from: e[0], to: e[1], name: E.regionEras[r][i][0], desc: E.regionEras[r][i][1], slug: slug(E.regionEras[r][i][0]), region: r })));
+for (const e of RERAS) if (ERAS.some(o => o.slug === e.slug) || RERAS.filter(o => o.slug === e.slug).length > 1) e.slug += '-' + e.region;
+const ALL_ERAS = [...ERAS, ...RERAS];
 const JOURNEYS = W.JOURNEYS.map(j => { const e = E.journeys[j.id];
   return { id: j.id, title: e.t, who: strip(j.who.replace(/“[^”]*”/g, '')).replace(/^[\s·]+/, ''), span: j.span.replace(/前 (\d+)/g, (m, y) => `${y} BC`),
     stops: j.stops.map((s, i) => ({ y: s[0], c: s[2], place: e.stops[i][0], t: e.stops[i][1] })) }; });
@@ -91,6 +97,7 @@ const REGIONS = {
   europe: { c: [17, 53], clip: 1, box: [-24, 34, 58, 71.5], name: 'Europe' },
   asia: { c: [95, 32], clip: 1, box: [34, -8, 148, 56], name: 'Asia' },
   africa: { c: [18, 3], clip: 1, box: [-19, -35, 52, 37.5], name: 'Africa' },
+  americas: { c: [-80, 15], clip: 1, box: [-126, -56, -34, 62], name: 'the Americas' },
   oceania: { c: [155, -22], clip: 1, box: [110, -48, 182, 0], name: 'Oceania' },
   world: { c: [11, 0], clip: 0, box: [-168.9, -57, 190.9, 84], name: 'the world' },
 };
@@ -256,16 +263,17 @@ for (const s of SNAPS) {
   const named = feats(s).filter(f => f.properties.n && f.properties.n.trim() && !isTribal(f.properties.n) && f.properties.n !== 'Antarctica')
     .map(f => ({ n: f.properties.n, area: geoArea(f) * R_KM * R_KM, r: null, f })).sort((a, b) => b.area - a.area);
   const top = named.slice(0, 5).map(x => polName(x.n));
-  const evs = eventsIn(s, end), sites = SITES.filter(x => x.y >= s && x.y <= end).sort((a, b) => a.y - b.y);
+  const evs = eventsIn(s, end), sites = SITES.filter(x => x.y >= s && x.y <= end).sort((a, b) => a.y - b.y), wr = ['china', 'rome', 'byz', 'caliph', 'mongol', 'ottoman', 'eng', 'usa', 'india', 'japan'].map(k => W.RULERS.find(R => R.k === k)).filter(Boolean).map(R => { const i = R.list.findIndex(r => r[0] <= s && s <= r[1]); return i < 0 ? null : { realm: E.rulersT[R.k], name: E.rulers[R.k][i], from: R.list[i][0], to: R.list[i][1] }; }).filter(Boolean);
   const lead = `This world map shows state borders in ${fy(s)}. The largest states and empires were ${top.slice(0, -1).join(', ')} and ${top.at(-1)}. The map stays in use until the next recorded border change in ${next ? fy(next) : 'the present'}.`;
-  const regionLinks = ['europe', 'asia', 'africa', 'oceania'].map(r => `<li><a href="${mapUrl(s, r)}">${REGIONS[r].name} in ${fy(s)} (map image)</a> · <a href="/#${hashYear(s)}${r === 'europe' ? '' : `-r-${r}`}-l-en">open in the interactive map</a></li>`).join('');
-  ['asia', 'africa', 'oceania'].forEach(r => NEED.add(`${r}|${s}`));
+  const regionLinks = ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<li><a href="${mapUrl(s, r)}">${REGIONS[r].name} in ${fy(s)} (map image)</a> · <a href="/#${hashYear(s)}${r === 'europe' ? '' : `-r-${r}`}-l-en">open in the interactive map</a></li>`).join('');
+  ['asia', 'africa', 'americas', 'oceania'].forEach(r => NEED.add(`${r}|${s}`));
   const body = `<p class="lead">${esc(lead)}</p>
 ${mapBlock(s, `World map in ${fy(s)} showing state borders`, '', 'world')}
 ${openBtn(`${hashYear(s)}-r-world`, `Open the world in ${fy(s)} in the interactive map`)}
 <h2>Largest states and empires in ${fy(s)}</h2>
 <p class="muted">Areas are approximate, from the historical border data.</p>
 ${table(['State', 'Approx. area', 'Region'], named.slice(0, 30).map(x => [stLink(x.n), fmtKm2(x.area), REGIONS[regionOf(geoCentroid(x.f))].name.replace('the world', '–')]))}
+${wr.length ? `<h2>Rulers in ${fy(s)}</h2>${table(['Realm', 'Ruler', 'Reign'], wr.map(r => [esc(r.realm), esc(r.name), `${fyShort(r.from)}–${fyShort(r.to)}`]))}` : ''}
 <h2>Regional maps</h2><ul class="links">${regionLinks}<li><a href="/en/year/${yearSlug(s)}">Europe in ${fy(s)}: rulers and events</a></li></ul>
 ${evs.length ? `<h2>Key events, ${fy(s)} to ${fy(end)}</h2>${table(['Year', 'Event', 'Where'], evs.map(e => [fy(e.y), esc(e.t), e.place ? placeLink(e.place) : '']))}` : ''}
 ${sites.length ? `<h2>Battles and sites in this period</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
@@ -304,12 +312,12 @@ ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a hre
 // ---------- battle / site pages ----------
 for (const x of SITES) {
   const s = snapFor(Math.max(-500, x.y)), held = polityAt(x.c, s), nc = nearCities(x.c, 1)[0];
-  const ctxEv = EVENTS.filter(e => Math.abs(e.y - x.y) <= 5 && e.place !== x.id && (!e.ll || regionOf(e.ll) === regionOf(x.c))).sort((a, b) => a.y - b.y), rul = rulersAt(x.y), ns = nearSites(x.c, 300, x.id);
+  const ctxEv = EVENTS.filter(e => Math.abs(e.y - x.y) <= 5 && e.place !== x.id && (!e.ll || regionOf(e.ll) === regionOf(x.c))).sort((a, b) => a.y - b.y), rul = rulersAt(x.y, regionOf(x.c)), ns = nearSites(x.c, 300, x.id);
   const body = `<p class="lead">${esc(x.d)}</p>
 ${mapBlock(s, `Map showing the location of ${x.title}`, pin(x.c, x.en, regionOf(x.c)), regionOf(x.c))}
 ${openBtn(`${hashYear(x.y)}-s-${x.id}`, `Open ${x.title} in the interactive map`)}
 <h2>Key facts</h2>
-${table(['', ''], [['Date', `<a href="/en/year/${yearSlug(s)}">${fy(x.y)}</a>`], ['Type', x.k === 'battle' ? 'Battle' : 'Historic site or event'], ['Location', `${x.c[1].toFixed(2)}° N, ${x.c[0].toFixed(2)}° E`], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Territory of (map of ' + fy(s) + ')', stLink(held)]])}
+${table(['', ''], [['Date', `<a href="/en/year/${yearSlug(s)}">${fy(x.y)}</a>`], ['Type', x.k === 'battle' ? 'Battle' : 'Historic site or event'], ['Location', fmtLL(x.c)], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Territory of (map of ' + fy(s) + ')', stLink(held)]])}
 ${rul.length ? `<h2>Rulers in ${fy(x.y)}</h2>${table(['Realm', 'Ruler', 'Reign'], rul.map(r => [esc(r.realm), esc(r.name), `${fyShort(r.from)}–${fyShort(r.to)}`]))}` : ''}
 ${ctxEv.length ? `<h2>The world around ${fy(x.y)}</h2>${table(['Year', 'Event', 'Where'], ctxEv.map(e => [fy(e.y), esc(e.t), e.place ? placeLink(e.place) : '']))}` : ''}
 ${ns.length ? `<h2>Other battles and sites nearby</h2><ul class="links">${ns.map(y => `<li><a href="/en/battle/${y.id}">${esc(y.title)}</a> · ${fy(y.y)}</li>`).join('')}</ul>` : ''}`;
@@ -320,7 +328,7 @@ ${ns.length ? `<h2>Other battles and sites nearby</h2><ul class="links">${ns.map
 }
 
 // ---------- state pages ----------
-const REALM_OF = { rome: 'rome', byz: 'byz', persia: 'persia', frank: 'france', hre: 'frank', eng: 'eng', spain: 'spain', rus: 'rus', ottoman: 'ottoman' };
+const REALM_OF = { rome: 'rome', byz: 'byz', persia: 'persia', frank: 'france', hre: 'frank', eng: 'eng', spain: 'spain', rus: 'rus', ottoman: 'ottoman', china: 'china', mongol: 'mongol', japan: 'japan', india: 'india', usa: 'usa' };
 for (const st of STATE_LIST) {
   const maps = st.maps.sort((a, b) => a.s - b.s), first = maps[0].s, last = maps.at(-1).s, peak = st.peak, L = lineage(st.n);
   const inside = CITIES.filter(c => polityAt(c.c, peak.s) === st.n);
@@ -364,18 +372,21 @@ ${table(['#', 'Year', 'Place', 'What happened'], j.stops.map((x, i) => [i + 1, `
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: `${j.title}: Route Map & Timeline`, inLanguage: 'en', dateModified: TODAY }] }));
 }
 
-// ---------- era pages ----------
-ERAS.forEach((e, i) => {
+// ---------- era pages (Europe + regional) ----------
+const RNAME = r => (r === 'europe' ? 'Europe' : REGIONS[r].name.replace(/^the /, ''));
+ALL_ERAS.forEach(e => {
+  const sib = ALL_ERAS.filter(o => o.region === e.region), i = sib.indexOf(e), rg = e.region;
   const mids = SNAPS.filter(s => s >= e.from && s < e.to), s = mids.length ? mids[Math.floor(mids.length / 2)] : snapFor(e.from);
-  const evs = eventsIn(e.from, e.to - 1), sites = SITES.filter(x => x.y >= e.from && x.y < e.to).sort((a, b) => a.y - b.y);
+  const inR = ll => !ll || regionOf(ll) === rg;
+  const evs = eventsIn(e.from, e.to - 1).filter(x => inR(x.ll)), sites = SITES.filter(x => x.y >= e.from && x.y < e.to && inR(x.c)).sort((a, b) => a.y - b.y);
   const body = `<p class="lead">${esc(e.desc)}</p>
-${mapBlock(s, `Map of Europe in ${fy(s)}, during the ${e.name}`)}
-${openBtn(hashYear(s), `Open the ${e.name} in the interactive map`)}
-${mids.length ? `<h2>Border maps in this era</h2><ul class="links">${mids.map(m => `<li><a href="/en/year/${yearSlug(m)}">Europe in ${fy(m)}</a></li>`).join('')}</ul>` : ''}
+${mapBlock(s, `Map of ${REGIONS[rg].name} in ${fy(s)}, during the ${e.name}`, '', rg)}
+${openBtn(hashYear(s) + (rg === 'europe' ? '' : `-r-${rg}`), `Open the ${e.name} in the interactive map`)}
+${mids.length ? `<h2>Border maps in this era</h2><ul class="links">${mids.map(m => rg === 'europe' ? `<li><a href="/en/year/${yearSlug(m)}">Europe in ${fy(m)}</a></li>` : `<li><a href="/en/world/${yearSlug(m)}">The world in ${fy(m)}</a></li>`).join('')}</ul>` : ''}
 ${evs.length ? `<h2>Timeline</h2>${table(['Year', 'Event', 'Where'], evs.map(x => [fy(x.y), esc(x.t), x.place ? placeLink(x.place) : '']))}` : ''}
 ${sites.length ? `<h2>Battles and sites</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
-<p class="pn">${i ? `<a href="/en/era/${ERAS[i - 1].slug}">← ${esc(ERAS[i - 1].name)}</a>` : '<span></span>'}${i < ERAS.length - 1 ? `<a href="/en/era/${ERAS[i + 1].slug}">${esc(ERAS[i + 1].name)} →</a>` : ''}</p>`;
-  add(`/en/era/${e.slug}`, page({ url: `/en/era/${e.slug}`, title: `${e.name} (${fyShort(e.from)}–${e.to >= 2026 ? 'today' : fyShort(e.to)}): Map & Timeline of Europe | Chronica Maps`,
+<p class="pn">${i ? `<a href="/en/era/${sib[i - 1].slug}">← ${esc(sib[i - 1].name)}</a>` : '<span></span>'}${i < sib.length - 1 ? `<a href="/en/era/${sib[i + 1].slug}">${esc(sib[i + 1].name)} →</a>` : ''}</p>`;
+  add(`/en/era/${e.slug}`, page({ url: `/en/era/${e.slug}`, title: `${e.name} (${fyShort(e.from)}–${e.to >= 2026 ? 'today' : fyShort(e.to)}): Map & Timeline of ${RNAME(rg)} | Chronica Maps`,
     desc: cut(`${e.name}, ${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}: ${e.desc}`), h1: `${esc(e.name)} <small>${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}</small>`,
     crumbs: [['Home', '/'], ['Eras', '/en/eras'], [e.name, `/en/era/${e.slug}`]], body }));
 });
@@ -389,7 +400,7 @@ for (const m of LMS) {
   const body = `<p class="lead">${esc(m.d.en)}</p>
 <div class="lmgal">${fig(m.img.then, THEN[m.st], alt1)}${fig(m.img.now, NOW[m.st], alt2)}</div>
 <h2>Key facts</h2>
-${table(['', ''], [['Country today', `<a href="/en/landmarks/${ctySlug(m.country)}">${esc(m.country)}</a>`], ['Status', STATUS[m.st]], ['Date', `<a href="/en/year/${yearSlug(s)}">${fy(m.y)}</a>`], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Location', `${m.c[1].toFixed(3)}° N, ${m.c[0].toFixed(3)}° E`]])}
+${table(['', ''], [['Country today', `<a href="/en/landmarks/${ctySlug(m.country)}">${esc(m.country)}</a>`], ['Status', STATUS[m.st]], ['Date', `<a href="/en/year/${yearSlug(s)}">${fy(m.y)}</a>`], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Location', fmtLL(m.c, 3)]])}
 ${mapBlock(s, `Map showing ${m.name} in ${fy(s)}`, pin(m.c, m.name, regionOf(m.c)), regionOf(m.c))}
 ${openBtn(`${hashYear(Math.max(-500, m.y))}-m-${m.id}`, `Open ${m.name} in the interactive map`)}
 <h2>Who ruled this place</h2>
@@ -425,20 +436,20 @@ hub('/en/years', 'Maps of Europe by Year (500 BC – Today)', 'Maps of Europe by
   `<ul class="grid">${SNAPS.map(s => `<li><a href="/en/year/${yearSlug(s)}"><img src="/maps/${yearSlug(s)}.svg" alt="Map of Europe in ${fy(s)}" loading="lazy" width="300" height="200"><span>Europe in ${fy(s)}</span></a></li>`).join('')}</ul>`, 'Years');
 hub('/en/world', 'Historical World Maps by Year (500 BC – Today)', 'Historical World Maps by Year', `${SNAPS.length} world border maps from ${fy(SNAPS[0])} to ${fy(SNAPS.at(-1))}, showing the empires and states of Europe, Asia, Africa, the Americas and Oceania.`,
   `<ul class="grid">${SNAPS.map(s => `<li><a href="/en/world/${yearSlug(s)}"><img src="${mapUrl(s, 'world')}" alt="World map in ${fy(s)}" loading="lazy" width="300" height="200"><span>The world in ${fy(s)}</span></a></li>`).join('')}</ul>`, 'World maps');
-const RG_ORDER = ['europe', 'asia', 'africa', 'oceania', 'world'];
+const RG_ORDER = ['europe', 'asia', 'africa', 'americas', 'oceania', 'world'];
 const byRegion = (list, ll) => RG_ORDER.map(r => [r, list.filter(x => regionOf(ll(x)) === r)]).filter(x => x[1].length);
 hub('/en/cities', 'Historic Cities of the World: Former Names & Timelines', 'Historic Cities', `${CITIES.length} cities in Europe, Asia, Africa and Oceania with their former names, timelines of key events and every state that ruled them.`,
   byRegion([...CITIES].sort((a, b) => a.name.localeCompare(b.name)), c => c.c).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : REGIONS[r].name}</h2>` + table(['City', 'Earliest name on record', 'From'], list.map(c => [`<a href="/en/city/${c.id}">${esc(c.name)}</a>`, esc(c.names[0].name), fy(c.names[0].from)]))).join(''), 'Cities');
-hub('/en/landmarks', 'Historic Landmarks of Europe: Then and Now', 'Historic Landmarks: Then and Now', `${LMS.length} historic landmarks in ${COUNTRIES.length} countries, each shown as it was and as it looks today, with lost buildings set beside what stands on their site now.`,
+hub('/en/landmarks', 'Historic Landmarks of the World: Then and Now', 'Historic Landmarks: Then and Now', `${LMS.length} historic landmarks in ${COUNTRIES.length} countries, each shown as it was and as it looks today, with lost buildings set beside what stands on their site now.`,
   COUNTRIES.map(c => `<h2><a href="/en/landmarks/${ctySlug(c)}">${esc(c)}</a></h2><ul class="lmgrid">${LMS.filter(m => m.country === c).sort((a, b) => a.y - b.y).map(lmCard).join('')}</ul>`).join(''), 'Landmarks');
 hub('/en/battles', 'Historic Battles and Sites on a Map: Europe, Asia, Africa', 'Battles and Historic Sites', `${SITES.length} battles and historic sites from ${fy(Math.min(...SITES.map(s => s.y)))} to ${fy(Math.max(...SITES.map(s => s.y)))}, each placed on the border map of its time.`,
   byRegion([...SITES].sort((a, b) => a.y - b.y), s => s.c).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : REGIONS[r].name}</h2>` + table(['Year', 'Battle or site'], list.map(s => [fy(s.y), `<a href="/en/battle/${s.id}">${esc(s.title)}</a>`]))).join(''), 'Battles & sites');
 hub('/en/states', 'States and Empires in History: Maps Over Time', 'States and Empires', `${STATE_LIST.length} states and empires, from Rome and the Tang to the Mughals and the Inca, each with its territory over time.`,
   byRegion(STATE_LIST, s => s.ll).map(([r, list]) => `<h2>${r === 'world' ? 'Americas and elsewhere' : REGIONS[r].name}</h2><ul class="links cols">${list.map(s => `<li><span class="sw" style="background:${colorOf(s.n)}"></span><a href="/en/state/${s.slug}">${esc(s.name)}</a> · ${fyShort(s.maps[0].s)}–${fyShort(s.maps.at(-1).s)}</li>`).join('')}</ul>`).join(''), 'States');
-hub('/en/journeys', 'Historical Journeys on a Map: Routes and Timelines', 'Historical Journeys', `${JOURNEYS.length} lives and campaigns traced stop by stop, from Alexander the Great to Napoleon.`,
+hub('/en/journeys', 'Historical Journeys on a Map: Routes and Timelines', 'Historical Journeys', `${JOURNEYS.length} lives, voyages and campaigns traced stop by stop, from Alexander the Great and Xuanzang to Zheng He, Columbus and Napoleon.`,
   `<ul class="links">${JOURNEYS.map(j => `<li><a href="/en/journey/${j.id}">${esc(j.title)}</a> · ${esc(j.span)} · ${esc(j.who)}</li>`).join('')}</ul>`, 'Journeys');
-hub('/en/eras', 'Eras of European History: Maps and Timelines', 'Eras of European History', `${ERAS.length} periods from Classical Greece to the present, each with its maps, events and battles.`,
-  table(['Era', 'Period'], ERAS.map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`])), 'Eras');
+hub('/en/eras', 'Eras of History by Region: Maps and Timelines', 'Eras of History', `${ALL_ERAS.length} periods of history in Europe, Asia, Africa, the Americas and Oceania, each with its maps, events and battles.`,
+  ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<h2>${RNAME(r)}</h2>` + table(['Era', 'Period'], ALL_ERAS.filter(e => e.region === r).map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`]))).join(''), 'Eras');
 hub('/en', 'Historical World Atlas: Maps, Cities, Battles & Timelines', 'Historical Atlas of the World', 'Browse 2,500 years of history in Europe, Asia, Africa and Oceania by year, city, battle, state, era and historical journey, or open the interactive map and drag the timeline.',
   `${openBtn('y1453', 'Open the interactive map')}<ul class="links">${NAV.map(([t, u]) => `<li><a href="${u}">${t}</a></li>`).join('')}<li><a href="/en/quiz">Map quiz</a></li></ul>`, 'Explore');
 
