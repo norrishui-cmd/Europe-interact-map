@@ -89,7 +89,7 @@ Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical
 
 function setRegion(r){
   if(!REGIONS[r])return;
-  region=r;onRegionChange();svg.transition().duration(900).call(zoom.transform,regionT(r));
+  region=r;onRegionChange();window.QEV&&QEV("region",r);svg.transition().duration(900).call(zoom.transform,regionT(r));
   d3.selectAll("#regions button").classed("on",function(){return this.dataset.r===region});
   writeHash();
 }
@@ -128,7 +128,7 @@ function renderSnap(force){
     ensure([s,layers.ghost?prevSnap(s):null,layers.modern?2010:null]).then(()=>{if(wantSnap===s)renderSnap(true)});
     return;
   }
-  curSnap=s;
+  curSnap=s;window.QEV&&QEV("snap",s);
   const fs=feats(s).filter(f=>f.properties.n&&f.properties.n.trim());
   gPol.selectAll("path.pol").data(fs,d=>d.properties.n).join(
     en=>en.append("path").attr("class",d=>"pol"+(isTribal(d.properties.n)?" tribal":"")).style("fill-opacity",0),
@@ -190,7 +190,7 @@ function routeCard(r){
   <div class="sec">${esc(U.routeStops)}</div><table>${named.map((p,i)=>`<tr><td class="y">${i+1}</td><td><a href="javascript:void 0" data-rp="${r.pts.indexOf(p)}">${esc(p.L)}</a></td></tr>`).join("")}</table>`);
   d3.selectAll("#pbody [data-rp]").on("click",function(){const p=r.pts[+this.dataset.rp];flyTo([p[0],p[1]]);pulse([p[0],p[1]])});
   const xs=r.pts.map(p=>projection([p[0],p[1]]));flyBox(d3.min(xs,p=>p[0]),d3.min(xs,p=>p[1]),d3.max(xs,p=>p[0]),d3.max(xs,p=>p[1]));
-  drawRoutes();placeOverlays();lastCard="t-"+r.id;writeHash();
+  drawRoutes();placeOverlays();lastCard="t-"+r.id;writeHash();window.QEV&&QEV("route",r.id);
 }
 function placeOverlays(){
   if(!curSnap) return;
@@ -294,7 +294,7 @@ function xToYear(x){const w=document.getElementById("track").clientWidth;return 
 function setYear(y,force){
   y=Math.max(MINY,Math.min(MAXY,Math.round(y)));
   if(y===0) y=year<0?1:-1; // 无公元 0 年
-  const changed=y!==year; year=y;
+  const changed=y!==year; year=y;window.QEV&&QEV("year",y);
   d3.select("#yearNum").text(U.yBig(y));
   d3.select("#yearEra").text(y<0?U.bc:U.ad);
   d3.select("#knob").style("left",tScale(y)*document.getElementById("track").clientWidth+"px");
@@ -364,7 +364,7 @@ function personCard(p){
   <table><tr><td class="y" data-y="${Math.max(MINY,p.y[0])}"${ll?` data-ll='${JSON.stringify(ll)}'`:""}>${yrs}</td><td>${p.PL?`${U.birthplace||"Birthplace"}${U.colon||": "}${esc(p.PL)}`:""}</td></tr></table>
   ${cs.length?`<div class="sec">${U.places||"Places"}</div><table>${cs.map(c=>`<tr><td><a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a></td></tr>`).join("")}</table>`:""}`);
   setYear(Math.max(MINY,Math.min(p.y[1],p.y[0]+30)));
-  if(ll){flyTo(ll);pulse(ll)}lastCard="h-"+p.id;writeHash();
+  if(ll){flyTo(ll);pulse(ll)}lastCard="h-"+p.id;writeHash();window.QEV&&QEV("person",p.id);
 }
 function cityCard(c){
   stopPlay();
@@ -377,7 +377,7 @@ function cityCard(c){
   ${ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""}
   ${peopleOf(c.id).length?`<div class="sec">${U.people||"Notable people"}</div><table>${peopleOf(c.id).map(p=>`<tr><td class="y" data-y="${Math.max(MINY,p.y[0])}">${fmtY(p.y[0])}</td><td><a href="javascript:void 0" data-person="${p.id}">${esc(p.N)}</a> · <span style="color:#7a6648">${esc(p.R)}</span></td></tr>`).join("")}</table>`:""}
   ${historyTable(c.c,"c-"+c.id)}`);
-  flyTo(c.c);pulse(c.c);lastCard="c-"+c.id;writeHash();
+  flyTo(c.c);pulse(c.c);lastCard="c-"+c.id;writeHash();window.QEV&&QEV("city",c.id);
 }
 function lmFig(img,label){
   if(!img)return "";
@@ -397,19 +397,19 @@ function landmarkCard(m){
   <div class="sec">${esc(U.lmCity)}</div><table><tr><td class="y">${Math.round(d)} ${esc(U.km)}</td><td><a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a></td></tr></table>
   ${near.length?`<div class="sec">${esc(U.lmNear)}</div><div class="lmnear">${near.map(o=>`<a href="javascript:void 0" data-lm="${o.id}">${esc(o.N)}</a>`).join(" · ")}</div>`:""}`);
   d3.selectAll("#pbody [data-lm]").on("click",function(){landmarkCard(window.LANDMARKS.find(x=>x.id===this.dataset.lm))});
-  flyTo(m.c);pulse(m.c);lastCard="m-"+m.id;writeHash();
+  flyTo(m.c);pulse(m.c);lastCard="m-"+m.id;writeHash();window.QEV&&QEV("landmark",m.id);
 }
 function siteCard(s){
   stopPlay();setYear(s.y);
   openPanel(`<h2>${esc(s.zh)}</h2><div class="latin">${esc(s.en)} · ${fmtYFull(s.y)}</div><div class="bio">${esc(s.d)}</div>${historyTable(s.c,"s-"+s.id)}`);
-  flyTo(s.c);pulse(s.c);lastCard="s-"+s.id;writeHash();
+  flyTo(s.c);pulse(s.c);lastCard="s-"+s.id;writeHash();window.QEV&&QEV("site",s.id);
 }
 function nearestCity(ll){let best=null,bd=1e9;for(const c of window.CITIES){const d=d3.geoDistance(c.c,ll)*6371;if(d<bd){bd=d;best=c}}return [best,bd]}
 function spotCard(ll){
   if(!ll)return;stopPlay();
   const [c,d]=nearestCity(ll);
   if(d<35*(3/Math.max(1,transform.k)))return cityCard(c);
-  const n=polityAt(ll,curSnap);
+  const n=polityAt(ll,curSnap);window.QEV&&QEV("spot",n);
   openPanel(`<h2>${U.spot}</h2><div class="latin">${Math.abs(ll[1]).toFixed(2)}°${ll[1]<0?"S":"N"}, ${Math.abs(ll[0]).toFixed(2)}°${ll[0]<0?"W":"E"}</div>
    <div class="bio">${fill(U.spotText,{y:fmtYFull(year),p:n?esc(zhOf(n)):U.gap,c:`<a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a>`,d:Math.round(d)})}</div>
    ${(()=>{const ns=nearbySites(ll,150);return ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""})()}
@@ -435,7 +435,7 @@ function journeyMenu(){
   d3.selectAll("#pbody [data-j]").on("click",function(){startJourney(this.dataset.j)});
 }
 function startJourney(id){
-  journey=window.JOURNEYS.find(j=>j.id===id);if(!journey)return;
+  journey=window.JOURNEYS.find(j=>j.id===id);if(!journey)return;window.QEV&&QEV("journey",id);
   d3.selectAll(".tbtn[data-t=journey]").classed("on",true);
   gJ.selectAll("*").remove();gJS.selectAll("*").remove();
   const st=journey.stops;
@@ -507,7 +507,7 @@ d3.selectAll(".tbtn").on("click",function(){
   const t=this.dataset.t;
   if(t==="journey"){if(journey){endJourney();closePanelSilent()}else journeyMenu();return}
   if(t==="quiz"){quiz?endQuiz():startQuiz();return}
-  layers[t]=!layers[t];d3.select(this).classed("on",layers[t]);
+  layers[t]=!layers[t];d3.select(this).classed("on",layers[t]);window.QEV&&QEV("layer",t);
   if(t==="rivers"){gRiv.style("display",layers.rivers?null:"none");gLake.style("display",layers.rivers?null:"none")}
   if(t==="ghost")drawGhost();if(t==="modern")drawModern();placeOverlays();
 });
@@ -566,4 +566,7 @@ function readHash(){
   m=h.match(/(?:^|-)h-([a-z0-9-]+?)(?:-[rl]-|$)/);if(m&&personById[m[1]]){const y=year;personCard(personById[m[1]]);setYear(y);return}
 }
 window.addEventListener("hashchange",()=>{if(ATLAS)readHash()});
+// 对外接口（任务模块使用）
+window.APPX={get year(){return year},get region(){return region},get curSnap(){return curSnap},get transform(){return transform},get SNAPS(){return SNAPS},layers,cityById,svg,zoom,gMap,gPol,path,openPanel,closePanelSilent,setRegion,setYear,feats,colorOf,zhOf,isTribal,regionOf,regionT,snapFor,ensure,renderSnap,flyTo,pulse,fmtY,personCard,cityCard,landmarkCard,siteCard};
+document.dispatchEvent(new Event("appx"));
 })();
