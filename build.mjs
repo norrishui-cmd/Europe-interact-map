@@ -118,6 +118,34 @@ const regionOfAll = lls => { const rs = new Set(lls.map(regionOf)); return rs.si
 const pt = (ll, r = 'europe') => { const p = PROJS[r](ll); return { x: +(p[0] / 12).toFixed(2), y: +(p[1] / 8).toFixed(2) }; }; // % of 1200×800
 const mapUrl = (s, r = 'europe') => (r === 'europe' ? `/maps/${yearSlug(s)}.svg` : `/maps/${r}/${yearSlug(s)}.svg`);
 const NEED = new Set();
+// area of each named, non-tribal state per snapshot (km²) — for "what changed" sections
+const AREA = {}, REG = {};
+for (const s of SNAPS) { const m = AREA[s] = new Map(), g = REG[s] = new Map(); for (const f of feats(s)) { const n = f.properties.n; if (!n || !n.trim() || isTribal(n)) continue; m.set(n, (m.get(n) || 0) + geoArea(f) * 6371 * 6371); if (!g.has(n)) g.set(n, regionOf(geoCentroid(f))); } }
+const inEurope = (n, s) => REG[s].get(n) === 'europe';
+function changes(prev, s, keep = () => true) {
+  const A = AREA[prev], B = AREA[s], big = 20000;
+  const appeared = [...B].filter(([n, a]) => !A.has(n) && a > big && keep(n, s)).sort((x, y) => y[1] - x[1]);
+  const vanished = [...A].filter(([n, a]) => !B.has(n) && a > big && keep(n, prev)).sort((x, y) => y[1] - x[1]);
+  const delta = [...B].filter(([n]) => A.has(n) && keep(n, s)).map(([n, a]) => [n, a - A.get(n), A.get(n)]).filter(x => Math.abs(x[1]) > 15000 && Math.abs(x[1]) / x[2] > 0.08).sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]));
+  return { appeared, vanished, delta };
+}
+const signKm = d => `${d >= 0 ? '+' : '−'}${fmtKm2(Math.abs(d))}`;
+function changeSection(prev, s, keep, scopeLink) {
+  if (prev === undefined) return '';
+  const { appeared, vanished, delta } = changes(prev, s, keep);
+  if (!appeared.length && !vanished.length && !delta.length) return '';
+  const nm = list => list.slice(0, 4).map(x => polName(x[0]));
+  const join = a => (a.length > 1 ? `${a.slice(0, -1).join(', ')} and ${a.at(-1)}` : a[0]);
+  const parts = [];
+  if (appeared.length) parts.push(`${appeared.length} state${appeared.length > 1 ? 's' : ''} appear${appeared.length > 1 ? '' : 's'} on the map, among them ${join(nm(appeared))}`);
+  if (vanished.length) parts.push(`${vanished.length} disappear${vanished.length > 1 ? '' : 's'}, among them ${join(nm(vanished))}`);
+  const gain = delta.filter(x => x[1] > 0)[0], loss = delta.filter(x => x[1] < 0)[0];
+  let txt = `Compared with the previous border map (${fy(prev)}), ${parts.join('; ') || 'no major state appears or disappears'}.`;
+  if (gain) txt += ` ${polName(gain[0])} gained the most territory (${signKm(gain[1])}).`;
+  if (loss) txt += ` ${polName(loss[0])} lost the most (${signKm(loss[1])}).`;
+  const rows = [...appeared.slice(0, 6).map(x => [stLink(x[0]), 'Appears', fmtKm2(x[1])]), ...vanished.slice(0, 6).map(x => [stLink(x[0]), 'Disappears', fmtKm2(x[1])]), ...delta.slice(0, 8).map(x => [stLink(x[0]), x[1] > 0 ? 'Grows' : 'Shrinks', signKm(x[1])])];
+  return `<h2>What changed since ${fy(prev)}</h2><p>${esc(txt)} <a href="${scopeLink(prev)}">See the ${fy(prev)} map</a>.</p>${table(['State', 'Change', 'Area / difference'], rows)}`;
+}
 
 // states: named, non-tribal, ≥3 maps, large enough
 const stInfo = {};
@@ -163,19 +191,28 @@ function mapSVG(s, r = 'europe') {
   const riv = PHYS.rivers.features.map(f => P(f)).filter(Boolean).map(d => `<path d="${d}"/>`).join('');
   const lakes = PHYS.lakes.features.map(f => P(f)).filter(Boolean).map(d => `<path d="${d}"/>`).join('');
   const sphere = '';
-  const labs = fs_.filter(f => !isTribal(f.properties.n)).slice(0, r === 'world' ? 18 : 14).map(f => {
+  const placed = [];
+  const labs = fs_.filter(f => !isTribal(f.properties.n)).slice(0, r === 'world' ? 26 : 18).map(f => {
     let g = f.geometry, best = g;
     if (g.type === 'MultiPolygon') { let ba = -1; for (const c of g.coordinates) { const pg = { type: 'Polygon', coordinates: c }; const a = geoArea(pg); if (a > ba) { ba = a; best = pg; } } }
     const c = P.centroid(best); if (!isFinite(c[0]) || c[0] < 30 || c[0] > 1170 || c[1] < 20 || c[1] > 780) return '';
     const fs2 = r === 'europe' ? Math.max(11, Math.min(24, 6 + Math.sqrt(f.properties.a) * 0.9)) : Math.max(10, Math.min(20, 5 + Math.sqrt(P.area(best)) * 0.04));
-    return `<text x="${c[0].toFixed(0)}" y="${c[1].toFixed(0)}" font-size="${fs2.toFixed(0)}">${esc(polName(f.properties.n))}</text>`;
+    const nm = polName(f.properties.n), w = nm.length * fs2 * 0.56 + 6, h = fs2 + 4, bx = [c[0] - w / 2, c[1] - h + 3, c[0] + w / 2, c[1] + 4];
+    if (placed.some(q => !(bx[2] < q[0] || bx[0] > q[2] || bx[3] < q[1] || bx[1] > q[3])) || placed.length >= (r === 'world' ? 18 : 14)) return '';
+    placed.push(bx);
+    return `<text x="${c[0].toFixed(0)}" y="${c[1].toFixed(0)}" font-size="${fs2.toFixed(0)}">${esc(nm)}</text>`;
   }).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect width="1200" height="800" fill="#c9d3c8"/>${land}${pols}<g fill="#b8c9c4" stroke="#7d9cab" stroke-width=".5">${lakes}</g><g fill="none" stroke="#7d9cab" stroke-width=".8">${riv}</g><path d="${P(PHYS.land)}" fill="none" stroke="#7d6a4c" stroke-width=".8" stroke-opacity=".7"/>${sphere}<g font-family="Georgia,serif" font-weight="700" fill="#3a2a1a" text-anchor="middle" paint-order="stroke" stroke="#efe4cb" stroke-width="3" stroke-linejoin="round">${labs}</g></svg>`;
 }
 
 // ---------- page template ----------
 const NAV = [['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage }) {
+  body = body.replace(/<!--EMBED:([^>]*)-->/, (_, h) => embedBox(h, url, h1.replace(/&amp;/g, '&').replace(/<[^>]+>/g, ''))).replace(/<!--EMBED:[^>]*-->/g, '');
+  if (!ogImage) { const m = body.match(/src="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
+  if (!ogImage) ogImage = '/og/world-1500.jpg';
+  const ogAbs = ogImage ? (/^https?:/.test(ogImage) ? ogImage : SITE + ogImage) : '';
   const bc = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c[0], item: SITE + c[1] })) };
   const lds = [bc, ...ld].map(o => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`).join('\n');
   return `<!DOCTYPE html>
@@ -191,7 +228,7 @@ function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage }) {
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${SITE}${url}">
-${ogImage ? `<meta property="og:image" content="${SITE}${ogImage}">` : ''}
+${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage) ? '\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">' : ''}\n<meta name="twitter:image" content="${ogAbs}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/page.css">
@@ -210,7 +247,9 @@ ${body}
 }
 const mapBlock = (s, alt, overlay = '', r = 'europe') => { NEED.add(`${r}|${s}`); return `<figure class="map"><div class="mapwrap"><img src="${mapUrl(s, r)}" width="1200" height="800" alt="${esc(alt)}" loading="eager" decoding="async">${overlay}</div><figcaption>Border map for ${fy(s)}. ${r === 'europe' ? `<a href="/en/year/${yearSlug(s)}">See Europe in ${fy(s)}</a>` : `<a href="/en/world/${yearSlug(s)}">See the world in ${fy(s)}</a>`}.</figcaption></figure>`; };
 const pin = (ll, label, r = 'europe') => { const p = pt(ll, r); return `<span class="pin" style="left:${p.x}%;top:${p.y}%"><span>${esc(label)}</span></span>`; };
-const openBtn = (h, label) => `<p><a class="btn" href="/#${h}-l-en">${esc(label)}</a></p>`;
+const openBtn = (h, label) => `<p><a class="btn" href="/#${h}-l-en">${esc(label)}</a></p><!--EMBED:${h}-->`;
+// copyable iframe code; the credit line under the map links back to the page
+const embedBox = (h, url, title) => { const code = `<iframe src="${SITE}/?embed=1#${h}-l-en" width="100%" height="520" style="border:0;max-width:100%" loading="lazy" title="${esc(title)}"></iframe>\n<p style="font-size:13px;margin:4px 0 0">Interactive map: <a href="${SITE}${url}">${esc(title)}</a> · Chronica Maps</p>`; return `<details class="embed"><summary>Embed this interactive map on your site</summary><p class="muted">Free to use on blogs, school pages and course sites. Copy the code below; please keep the credit line.</p><textarea readonly rows="4" onclick="this.select()">${esc(code)}</textarea></details>`; };
 const table = (head, rows) => `<div class="tw"><table>${head.some(h => h) ? `<thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead>` : ''}<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 const stLink = n => { if (!n) return '<span class="muted">Unclaimed / no data</span>'; const u = stateUrl(n); const sw = `<span class="sw" style="background:${colorOf(n)}"></span>`; return u ? `${sw}<a href="${u}">${esc(polName(n))}</a>` : `${sw}${esc(polName(n))}`; };
 const placeLink = id => { const c = CITIES.find(x => x.id === id); if (c) return `<a href="/en/city/${c.id}">${esc(c.name)}</a>`; const s = SITES.find(x => x.id === id); return s ? `<a href="/en/battle/${s.id}">${esc(s.title)}</a>` : ''; };
@@ -246,6 +285,7 @@ ${openBtn(hashYear(s), `Open Europe in ${fy(s)} in the interactive map`)}
 <h2>States on the map in ${fy(s)}</h2>
 <p class="muted">Areas are approximate and cover each state's whole territory, including land outside the map frame.</p>
 ${table(['State', 'Approx. area'], named.slice(0, 25).map(x => [stLink(x.n), fmtKm2(x.area)]))}
+${changeSection(prev, s, inEurope, p => `/en/year/${yearSlug(p)}`)}
 ${rul.length ? `<h2>Rulers in ${fy(s)}</h2>${table(['Realm', 'Ruler', 'Reign'], rul.map(r => [esc(r.realm), esc(r.name), `${fyShort(r.from)}–${fyShort(r.to)}`]))}` : ''}
 ${evs.length ? `<h2>Key events, ${fy(s)} to ${fy(end)}</h2>${table(['Year', 'Event', 'Where'], evs.map(e => [fy(e.y), esc(e.t), e.place ? placeLink(e.place) : '']))}` : ''}
 ${sites.length ? `<h2>Battles and sites in this period</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
@@ -273,6 +313,7 @@ ${openBtn(`${hashYear(s)}-r-world`, `Open the world in ${fy(s)} in the interacti
 <h2>Largest states and empires in ${fy(s)}</h2>
 <p class="muted">Areas are approximate, from the historical border data.</p>
 ${table(['State', 'Approx. area', 'Region'], named.slice(0, 30).map(x => [stLink(x.n), fmtKm2(x.area), REGIONS[regionOf(geoCentroid(x.f))].name.replace('the world', '–')]))}
+${changeSection(prev, s, () => true, p => `/en/world/${yearSlug(p)}`)}
 ${wr.length ? `<h2>Rulers in ${fy(s)}</h2>${table(['Realm', 'Ruler', 'Reign'], wr.map(r => [esc(r.realm), esc(r.name), `${fyShort(r.from)}–${fyShort(r.to)}`]))}` : ''}
 <h2>Regional maps</h2><ul class="links">${regionLinks}<li><a href="/en/year/${yearSlug(s)}">Europe in ${fy(s)}: rulers and events</a></li></ul>
 ${evs.length ? `<h2>Key events, ${fy(s)} to ${fy(end)}</h2>${table(['Year', 'Event', 'Where'], evs.map(e => [fy(e.y), esc(e.t), e.place ? placeLink(e.place) : '']))}` : ''}
@@ -337,7 +378,9 @@ for (const st of STATE_LIST) {
   const kin = L ? STATE_LIST.filter(o => o !== st && lineage(o.n) === L) : [];
   const rg = st.region;
   const overlay = `<svg class="hl" viewBox="0 0 1200 800" aria-hidden="true"><path d="${PATHS[rg](peak.f)}" fill="#a8322a" fill-opacity=".18" stroke="#a8322a" stroke-width="2.5"/></svg>`;
-  const lead = `${st.name} appears on ${maps.length} of the ${SNAPS.length} border maps, from ${fy(first)} to ${fy(last)}. Its mapped territory was largest in ${fy(peak.s)}, at roughly ${fmtKm2(peak.area)}.${L ? ` Chronica Maps groups it with the ${LINEAGE_EN[L[0]]} lineage, shown in the same colour across periods.` : ''}`;
+  const steps = maps.slice(1).map((m, i) => ({ from: maps[i].s, to: m.s, d: m.area - maps[i].area })), up = steps.filter(x => x.d > 0).sort((a, b) => b.d - a.d)[0], down = steps.filter(x => x.d < 0).sort((a, b) => a.d - b.d)[0];
+  const trend = `${up ? ` Its largest expansion came between ${fy(up.from)} and ${fy(up.to)} (${signKm(up.d)}).` : ''}${down ? ` Its sharpest contraction came between ${fy(down.from)} and ${fy(down.to)} (${signKm(down.d)}).` : ''}`;
+  const lead = `${st.name} appears on ${maps.length} of the ${SNAPS.length} border maps, from ${fy(first)} to ${fy(last)}. Its mapped territory was largest in ${fy(peak.s)}, at roughly ${fmtKm2(peak.area)}.${trend}${L ? ` Chronica Maps groups it with the ${LINEAGE_EN[L[0]]} lineage, shown in the same colour across periods.` : ''}`;
   const body = `<p class="lead">${esc(lead)}</p>
 ${mapBlock(peak.s, `Map of ${st.name} in ${fy(peak.s)}`, overlay, rg)}
 ${openBtn(hashYear(peak.s), `Open ${fy(peak.s)} in the interactive map`)}
@@ -412,7 +455,7 @@ ${ns.length ? `<h2>Battles and sites nearby</h2><ul class="links">${ns.map(x => 
   const imgs = [m.img.then, m.img.now].filter(Boolean);
   add(`/en/landmark/${m.id}`, page({ url: `/en/landmark/${m.id}`, title: `${m.name} Then and Now: History, Old Images & Map | Chronica Maps`,
     desc: cut(`${m.name} then and now: ${m.d.en}`), h1: `${esc(m.name)}: Then and Now`,
-    crumbs: [['Home', '/'], ['Landmarks', '/en/landmarks'], [m.country, `/en/landmarks/${ctySlug(m.country)}`], [m.name, `/en/landmark/${m.id}`]], body, ogImage: null,
+    crumbs: [['Home', '/'], ['Landmarks', '/en/landmarks'], [m.country, `/en/landmarks/${ctySlug(m.country)}`], [m.name, `/en/landmark/${m.id}`]], body, ogImage: (m.img.now || m.img.then || {}).t960 || null,
     ld: [{ '@context': 'https://schema.org', '@type': 'LandmarksOrHistoricalBuildings', name: m.name, description: m.d.en, image: imgs.map(i => i.t960 || i.t500), geo: { '@type': 'GeoCoordinates', latitude: m.c[1], longitude: m.c[0] }, containedInPlace: { '@type': 'Country', name: m.country } }] }));
   m.imgs = imgs;
 }
@@ -464,7 +507,26 @@ for (const p of pages) write(p.url + '.html', p.html);
 const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
 write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/__V__/g, VER));
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
-for (const k of NEED) { const [r, s] = k.split('|'); write(mapUrl(+s, r).slice(1), mapSVG(+s, r)); }
+const SVGS = new Map();
+for (const k of NEED) { const [r, s] = k.split('|'); const svg = mapSVG(+s, r); SVGS.set(k, svg); write(mapUrl(+s, r).slice(1), svg); }
+// social preview images (1200×630 JPEG) for every map used on a page
+try {
+  const { Resvg } = await import('@resvg/resvg-js');
+  const sharp = (await import('sharp')).default;
+  const FD = path.join(ROOT, 'node_modules/dejavu-fonts-ttf/ttf/');
+  const fontOpts = { fontFiles: [FD + 'DejaVuSerif.ttf', FD + 'DejaVuSerif-Bold.ttf'], loadSystemFonts: false, defaultFontFamily: 'DejaVu Serif', serifFamily: 'DejaVu Serif' };
+  fs.mkdirSync(path.join(OUT, 'og'), { recursive: true });
+  let n = 0;
+  for (const [k, svg] of SVGS) {
+    const [r, s] = k.split('|'), title = r === 'world' ? `The world in ${fy(+s)}` : `${r === 'americas' ? 'The Americas' : REGIONS[r].name} in ${fy(+s)}`;
+    const inner = svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+    const og = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630"><svg width="1200" height="630" viewBox="0 85 1200 630" preserveAspectRatio="xMidYMid slice">${inner}</svg><rect y="540" width="1200" height="90" fill="#2b2118" fill-opacity=".9"/><text x="40" y="598" font-family="DejaVu Serif" font-weight="bold" font-size="42" fill="#f6e9cf">${esc(title)}</text><text x="1160" y="597" text-anchor="end" font-family="DejaVu Serif" font-size="26" fill="#e3c9a0">chronicamaps.com</text></svg>`;
+    const png = new Resvg(og, { font: fontOpts }).render().asPng();
+    await sharp(png).jpeg({ quality: 78, mozjpeg: true }).toFile(path.join(OUT, ogUrl(+s, r).slice(1)));
+    n++;
+  }
+  console.log(`og images: ${n}`);
+} catch (e) { console.warn('og images skipped:', e.message); }
 // split border data for the app: index + one file per snapshot + precomputed "who ruled here"
 const appear = {};
 SNAPS.forEach((s, i) => { const seen = new Set(); for (const f of feats(s)) { const n = f.properties.n; if (!n || !n.trim() || seen.has(n)) continue; seen.add(n); (appear[n] ||= []).push(i); } });
@@ -476,6 +538,19 @@ for (const c of W.CITIES) HIST['c-' + c.id] = histOf(c.c);
 for (const x of W.SITES) HIST['s-' + x.id] = histOf(x.c);
 write('atlas/hist.json', JSON.stringify(HIST));
 write('assets/page.css', fs.readFileSync(path.join(ROOT, 'page.css'), 'utf8'));
+// self-hosted vendor files: D3 and the Latin display font (CJK fonts load from Google only for Chinese UI)
+{
+  const V = path.join(OUT, 'vendor'); fs.mkdirSync(path.join(V, 'fonts'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'node_modules/d3/dist/d3.min.js'), path.join(V, 'd3.min.js'));
+  const FD = path.join(ROOT, 'node_modules/@fontsource/cormorant-garamond/files');
+  const ranges = { latin: 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD', 'latin-ext': 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF' };
+  let css = '';
+  for (const [w, st] of [[500, 'normal'], [700, 'normal'], [500, 'italic']]) for (const sub of ['latin-ext', 'latin']) {
+    const f = `cormorant-garamond-${sub}-${w}-${st}.woff2`; fs.copyFileSync(path.join(FD, f), path.join(V, 'fonts', f));
+    css += `@font-face{font-family:'Cormorant Garamond';font-style:${st};font-weight:${w};font-display:swap;src:url(/vendor/fonts/${f}) format('woff2');unicode-range:${ranges[sub]}}\n`;
+  }
+  write('vendor/fonts.css', css);
+}
 write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#a8322a"/><text x="32" y="45" text-anchor="middle" font-family="Georgia,serif" font-size="40" font-weight="700" fill="#f6e9cf">C</text></svg>`);
 const urls = ['/', ...pages.map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));

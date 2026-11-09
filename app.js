@@ -1,4 +1,6 @@
 /* 寰宇时序 · Chronica Mundi — 主程序 */
+// 嵌入模式（?embed=1）：隐藏面板与导航，只留地图、时间轴和回到本站的链接
+if(new URLSearchParams(location.search).has("embed")){document.body.classList.add("embed");const a=document.createElement("a");a.id="embedLink";a.target="_blank";a.rel="noopener";a.textContent="Chronica Maps ↗";a.href="https://chronicamaps.com/"+location.hash;document.body.appendChild(a);window.addEventListener("hashchange",()=>{a.href="https://chronicamaps.com/"+location.hash})}
 (function(){
 const MINY=-500, MAXY=2026;
 const W=()=>window.innerWidth, H=()=>window.innerHeight;

@@ -12,12 +12,17 @@
 <meta property="og:title" content="Chronica Mundi · Interactive Historical World Atlas">
 <meta property="og:site_name" content="Chronica Maps">
 <meta property="og:type" content="website">
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="summary_large_image">
+<meta property="og:image" content="https://chronicamaps.com/og/world-1500.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:image" content="https://chronicamaps.com/og/world-1500.jpg">
 <meta name="twitter:title" content="Chronica Mundi · Interactive Historical World Atlas">
 <meta property="og:description" content="Interactive historical atlas of the world, 500 BC – present">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&family=Noto+Serif+TC:wght@400;600;900&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<link rel="stylesheet" href="/vendor/fonts.css">
+<link rel="preload" href="/atlas/index.json?v=__V__" as="fetch" crossorigin>
+<link rel="preload" href="/physical.json?v=__V__" as="fetch" crossorigin>
+<script src="/vendor/d3.min.js"></script>
 <style>
 :root{
  --paper:#efe4cb; --paper2:#e6d7b5; --ink:#2b2117; --ink2:#5b4a36; --muted:#8a7658;
@@ -157,6 +162,9 @@ body.latin #eras div{font-size:12px}
 #regions button{font:inherit;font-size:11.5px;padding:2px 6px;border:1px solid #c9b48a;background:rgba(255,250,238,.7);color:var(--ink2);border-radius:3px;cursor:pointer}
 #regions button.on{background:var(--seal);color:#f6e9cf;border-color:var(--seal)}
 .sphere{fill:none;stroke:#8a7a5a;stroke-width:1}
+body.embed #title,body.embed #tools,body.embed #legend,body.embed #explore,body.embed #note{display:none!important}
+body.embed #panel{max-width:46%}
+#embedLink{position:fixed;left:10px;bottom:118px;z-index:30;background:rgba(43,33,24,.88);color:#f6e9cf;font:600 13px/1 Georgia,serif;padding:6px 10px;border-radius:4px;text-decoration:none}
 #explore{position:fixed;right:14px;bottom:150px;z-index:4;font-size:12.5px;background:rgba(246,238,219,.92);padding:3px 9px;border-radius:3px;border:1px solid #c9b48a}
 #explore a{color:var(--seal);text-decoration:none}
 #explore a:hover{text-decoration:underline}
@@ -236,7 +244,7 @@ body.latin #eras div{font-size:12px}
  var m=location.hash.match(/(?:^#|-)l-(zhs|zht|en|de|fr|es)(?:-|$)/),L=m?codes[m[1]]:null;
  if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
  if(!L||!inv[L]){L="en"}
- window.APP_V="__V__";window.LANG=L;window.LANG_CODE=inv[L];window.LANG_CODES=inv;
+ window.APP_V="__V__";window.LANG=L;if(/^zh/.test(L)){var g=document.createElement("link");g.rel="stylesheet";g.href="https://fonts.googleapis.com/css2?family=Noto+Serif+"+(L==="zh-Hant"?"TC":"SC")+":wght@400;600;900&display=swap";document.head.appendChild(g)}window.LANG_CODE=inv[L];window.LANG_CODES=inv;
  var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js","content_world2.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_en.js","content_more_en.js","content_world_en.js","content_world2_en.js"];f.push("landmarks.js");
  f=f.concat(["localize.js","app.js"]);
  (function next(i){if(i>=f.length)return;var s=document.createElement("script");s.src=f[i]+"?v=__V__";s.onload=function(){next(i+1)};document.body.appendChild(s)})(0);
