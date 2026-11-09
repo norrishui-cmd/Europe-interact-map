@@ -165,7 +165,9 @@ body.latin #eras div{font-size:12px}
 body.embed #title,body.embed #tools,body.embed #legend,body.embed #explore,body.embed #note{display:none!important}
 body.embed #panel{max-width:46%}
 #embedLink{position:fixed;left:10px;bottom:118px;z-index:30;background:rgba(43,33,24,.88);color:#f6e9cf;font:600 13px/1 Georgia,serif;padding:6px 10px;border-radius:4px;text-decoration:none}
-#explore{position:fixed;right:14px;bottom:150px;z-index:4;font-size:12.5px;background:rgba(246,238,219,.92);padding:3px 9px;border-radius:3px;border:1px solid #c9b48a}
+.rlabel{font:italic 600 13px "Cormorant Garamond",Georgia,serif;paint-order:stroke;stroke:#f3ead6;stroke-width:3.5px;text-anchor:middle}
+#explore b{color:#7a5a3a;font-weight:600;margin-right:4px}
+#explore{position:fixed;right:14px;bottom:168px;z-index:4;font-size:12.5px;line-height:1.6;text-align:right;max-width:560px;background:rgba(246,238,219,.92);padding:3px 9px;border-radius:3px;border:1px solid #c9b48a}
 #explore a{color:var(--seal);text-decoration:none}
 #explore a:hover{text-decoration:underline}
 #note{position:fixed;right:14px;bottom:124px;font-size:11px;color:var(--ink2);z-index:4;background:rgba(246,238,219,.85);padding:3px 8px;border-radius:3px;max-width:420px;text-align:right}
@@ -220,12 +222,13 @@ body.latin #eras div{font-size:12px}
  <button class="tbtn on" data-t="rivers">Rivers</button>
  <button class="tbtn on" data-t="ghost">Previous borders</button>
  <button class="tbtn" data-t="modern">Modern borders</button>
+ <button class="tbtn" data-t="routes">Trade routes</button>
  <button class="tbtn" data-t="quiz">Place-name quiz</button>
 </div>
 <div id="legend" class="plate"><h3>Legend · hover to highlight / click to focus</h3><div id="legItems"></div></div>
 <div id="panel" class="plate panel"><button class="x" onclick="closePanel()">×</button><div id="pbody"></div></div>
 <div id="quizBar" class="plate"></div>
-<nav id="explore" aria-label="Explore"><a href="/daily">Daily puzzle</a> · <a href="/compare">Compare</a> · <a href="/town">Town history</a> · <a href="/en/world">World maps</a> · <a href="/en/years">Europe by year</a> · <a href="/en/cities">Cities</a> · <a href="/en/landmarks">Landmarks</a> · <a href="/en/battles">Battles</a> · <a href="/en/states">States</a> · <a href="/en/journeys">Journeys</a> · <a href="/en/eras">Eras</a></nav>
+<nav id="explore" aria-label="Explore"><b>Play</b> <a href="/daily">Daily puzzle</a> · <a href="/compare">Compare</a> · <a href="/town">Town history</a> · <a href="/size">True size</a> · <a href="/animate">Animate</a><br><b>Browse</b> <a href="/en/world">World maps</a> · <a href="/en/years">Europe by year</a> · <a href="/en/cities">Cities</a> · <a href="/en/landmarks">Landmarks</a> · <a href="/en/battles">Battles</a> · <a href="/en/states">States</a> · <a href="/en/journeys">Journeys</a> · <a href="/en/routes">Routes</a> · <a href="/en/eras">Eras</a></nav>
 <div id="note">Historical borders are approximate · base maps from <a href="https://github.com/aourednik/historical-basemaps" target="_blank">historical-basemaps</a> (GPL-3.0) and Natural Earth · inspired by <a href="https://github.com/DeanChensj/jiangshan-map" target="_blank">Jiangshan Atlas</a></div>
 <div id="timeline" class="plate">
  <div id="tlTop">
@@ -245,7 +248,7 @@ body.latin #eras div{font-size:12px}
  if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
  if(!L||!inv[L]){L="en"}
  window.APP_V="__V__";window.LANG=L;if(/^zh/.test(L)){var g=document.createElement("link");g.rel="stylesheet";g.href="https://fonts.googleapis.com/css2?family=Noto+Serif+"+(L==="zh-Hant"?"TC":"SC")+":wght@400;600;900&display=swap";document.head.appendChild(g)}window.LANG_CODE=inv[L];window.LANG_CODES=inv;
- var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js","content_world2.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_en.js","content_more_en.js","content_world_en.js","content_world2_en.js"];f.push("landmarks.js");
+ var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js","content_world2.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_en.js","content_more_en.js","content_world_en.js","content_world2_en.js"];f.push("landmarks.js","routes.js");
  f=f.concat(["localize.js","app.js"]);
  (function next(i){if(i>=f.length)return;var s=document.createElement("script");s.src=f[i]+"?v=__V__";s.onload=function(){next(i+1)};document.body.appendChild(s)})(0);
 })();

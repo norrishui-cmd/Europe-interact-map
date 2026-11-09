@@ -1,4 +1,7 @@
-window.UI["zh-Hant"]={"title":"寰宇時序",
+window.UI["zh-Hant"]={"t_routes":"貿易路線",
+"tagRoute":"商路",
+"routeStops":"沿線要站",
+"title":"寰宇時序",
 "seal":"寰<br>宇",
 "sub":"Chronica Mundi · 500 BC – Present",
 "regions":{"europe":"歐洲","asia":"亞洲","africa":"非洲","americas":"美洲","oceania":"大洋洲","world":"全球"},

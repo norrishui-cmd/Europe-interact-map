@@ -94,3 +94,13 @@ pre.share{font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;background:#fff;bo
 .tbar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:1em 0;border:1px solid #c9b48a}
 .tbar span{min-width:2px;border-right:1px solid rgba(255,255,255,.6)}
 h2 small,h3 small{color:var(--muted);font-weight:400}
+
+.animbox{border:1px solid #c9b48a;border-radius:6px;background:#f3ead6;padding:8px;text-align:center}
+.animbox canvas{max-width:100%;max-height:70vh;height:auto;display:inline-block}
+.sizebox svg{touch-action:none}
+
+.toolgrid{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.toolgrid a{display:block;height:100%;padding:14px 16px;border:1px solid #d8c6a0;border-radius:8px;background:#fbf5e8;text-decoration:none;color:var(--ink)}
+.toolgrid a:hover{border-color:var(--seal)}
+.toolgrid b{display:block;color:var(--seal);font-size:18px;margin-bottom:4px}
+.toolgrid span{font-size:15px;color:var(--ink2)}

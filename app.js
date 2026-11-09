@@ -5,7 +5,7 @@ if(new URLSearchParams(location.search).has("embed")){document.body.classList.ad
 const MINY=-500, MAXY=2026;
 const W=()=>window.innerWidth, H=()=>window.innerHeight;
 let ATLAS=null, PHYS=null, SNAPS=[], IDXA=null, HIST=null, region="europe", SF=1, year=-27, curSnap=null, transform=d3.zoomIdentity;
-const layers={cities:true,sites:true,landmarks:true,rivers:true,ghost:true,modern:false};
+const layers={cities:true,sites:true,landmarks:true,rivers:true,ghost:true,modern:false,routes:false};
 let journey=null, jIdx=0, quiz=null, playing=null, hoverName=null;
 
 // ---------- 工具 ----------
@@ -49,8 +49,8 @@ function inRegion(ll){return region==="world"||regionOf(ll)===region}
 function regionOf(ll){let best="world",bd=1e9;for(const k of REGION_KEYS){const R=REGIONS[k];if(k==="world")continue;const [x0,y0,x1,y1]=R.box;let lon=ll[0];if(lon<x0)lon+=360;const inBox=lon>=x0-4&&lon<=x1+4&&ll[1]>=y0-4&&ll[1]<=y1+4;const d=d3.geoDistance(ll,R.c);if(inBox&&d<bd){bd=d;best=k}}return best}
 const seaRect=svg.append("rect").attr("class","sea");
 const gMap=svg.append("g");
-const gLand=gMap.append("g"), gPol=gMap.append("g"), gLake=gMap.append("g"), gRiv=gMap.append("g"), gGhost=gMap.append("g"), gModern=gMap.append("g"), gTex=gMap.append("g"), gJ=gMap.append("g");
-const gOver=svg.append("g"), gLab=gOver.append("g"), gSites=gOver.append("g"), gLm=gOver.append("g"), gCities=gOver.append("g"), gJS=gOver.append("g"), gQuiz=gOver.append("g"), gPulse=gOver.append("g");
+const gLand=gMap.append("g"), gPol=gMap.append("g"), gLake=gMap.append("g"), gRiv=gMap.append("g"), gGhost=gMap.append("g"), gModern=gMap.append("g"), gRoute=gMap.append("g").attr("class","routes"), gTex=gMap.append("g"), gJ=gMap.append("g");
+const gOver=svg.append("g"), gLab=gOver.append("g"), gRL=gOver.append("g"), gSites=gOver.append("g"), gLm=gOver.append("g"), gCities=gOver.append("g"), gJS=gOver.append("g"), gQuiz=gOver.append("g"), gPulse=gOver.append("g");
 const tip=d3.select("#tip");
 
 function boxPts(b){const [x0,y0,x1,y1]=b,pts=[];for(let x=x0;x<=x1;x+=1){pts.push([x,y0],[x,y1])}for(let y=y0;y<=y1;y+=1){pts.push([x0,y],[x1,y])}return {type:"MultiPoint",coordinates:pts}}
@@ -171,9 +171,31 @@ function computeLabels(s){
 }
 
 function nameAt(city,y){let nm=null;for(const n of city.names){if(n[0]<=y)nm=n}return nm}
+// 贸易路线图层
+function routeOn(r){return layers.routes&&year>=r.y[0]&&year<=r.y[1]}
+function drawRoutes(){
+  const rs=(window.ROUTES||[]).filter(routeOn);
+  gRoute.selectAll("path").data(rs,r=>r.id).join(en=>en.append("path").attr("fill","none").attr("stroke-linecap","round").attr("vector-effect","non-scaling-stroke").style("cursor","pointer").on("click",(e,r)=>{e.stopPropagation();routeCard(r)}).call(p=>p.append("title")))
+    .attr("d",r=>path({type:"LineString",coordinates:r.pts.map(p=>[p[0],p[1]])})).attr("stroke",r=>r.col).attr("stroke-width",3.5).attr("stroke-dasharray","9 5").attr("stroke-opacity",.9)
+    .select("title").text(r=>`${r.N} · ${fmtY(r.y[0])}–${fmtY(r.y[1])}`);
+}
+function routeCard(r){
+  stopPlay();if(year<r.y[0]||year>r.y[1])setYear(Math.max(-500,Math.round((r.y[0]+r.y[1])/2)));
+  if(!layers.routes){layers.routes=true;d3.selectAll(".tbtn[data-t=routes]").classed("on",true)}
+  const onSite=/chronicamaps\.com$|vercel\.app$/.test(location.hostname), named=r.pts.filter(p=>p[2]);
+  openPanel(`<h2>${esc(r.N)}</h2><div class="latin">${fmtYFull(r.y[0])} – ${fmtYFull(r.y[1])}</div><div class="bio">${esc(r.D)}</div>
+  ${onSite?`<p><a href="/en/route/${r.id}">${esc(U.lmPage)}</a></p>`:""}
+  <div class="sec">${esc(U.routeStops)}</div><table>${named.map((p,i)=>`<tr><td class="y">${i+1}</td><td><a href="javascript:void 0" data-rp="${r.pts.indexOf(p)}">${esc(p.L)}</a></td></tr>`).join("")}</table>`);
+  d3.selectAll("#pbody [data-rp]").on("click",function(){const p=r.pts[+this.dataset.rp];flyTo([p[0],p[1]]);pulse([p[0],p[1]])});
+  const xs=r.pts.map(p=>projection([p[0],p[1]]));flyBox(d3.min(xs,p=>p[0]),d3.min(xs,p=>p[1]),d3.max(xs,p=>p[0]),d3.max(xs,p=>p[1]));
+  drawRoutes();placeOverlays();lastCard="t-"+r.id;writeHash();
+}
 function placeOverlays(){
   if(!curSnap) return;
   const k=transform.k*SF, T=p=>transform.apply(p);
+  drawRoutes();
+  {const rs=(window.ROUTES||[]).filter(routeOn).map(r=>{const p=r.pts[Math.floor(r.pts.length/2)];return {r,c:projection([p[0],p[1]])}});
+   gRL.selectAll("text").data(rs,d=>d.r.id).join(en=>en.append("text").attr("class","rlabel").style("cursor","pointer").on("click",(e,d)=>{e.stopPropagation();routeCard(d.r)})).attr("transform",d=>`translate(${T(d.c)})`).attr("fill",d=>d.r.col).text(d=>d.r.N);}
   // 政权标签
   const mob=W()<760?3:1;const labs=(labelCache[curSnap]||[]).filter(d=>d.a*k*k>(d.tribal?60:14)*mob&&vis(d.ll));
   const L=gLab.selectAll("text.plabel").data(labs,d=>d.n).join(en=>{const t=en.append("text").attr("class","plabel");t.append("tspan").attr("class","zh");t.append("tspan").attr("class","en").attr("x",0).attr("dy","1.15em");return t});
@@ -478,6 +500,7 @@ function buildIndex(){
   window.CITIES.forEach(c=>IDX.push({k:[c.zh,c._k||"",...c.names.map(n=>n[1])].join(" "),label:c.zh,tag:U.tagCity+" · "+c.names[0][1],go:()=>cityCard(c)}));
   (window.LANDMARKS||[]).forEach(m=>IDX.push({k:[m.N,m.N2,m._k].join(" "),label:m.N,tag:`${U.tagLandmark} · ${m.C}`,go:()=>landmarkCard(m)}));
   window.SITES.forEach(s=>IDX.push({k:s.zh+" "+(s._k||""),label:s.zh,tag:`${s.k==="battle"?U.tagBattle:U.tagSite} · ${fmtY(s.y)}`,go:()=>siteCard(s)}));
+  (window.ROUTES||[]).forEach(r=>IDX.push({k:[r.N,r.n.en,r.n.zh].join(" "),label:r.N,tag:`${U.tagRoute} · ${fmtY(r.y[0])}–${fmtY(r.y[1])}`,go:()=>routeCard(r)}));
   window.JOURNEYS.forEach(j=>IDX.push({k:j.zh+" "+j.who+" "+(j._k||""),label:j.zh,tag:U.tagJourney+" · "+j.span,go:()=>startJourney(j.id)}));
   window.RULERS.forEach(R=>R.list.forEach(r=>IDX.push({k:r[2]+" "+R.t,label:r[2],tag:`${R.t} · ${fmtY(r[0])}–${fmtY(r[1])}`,go:()=>{setYear(r[0]);writeHash()}})));
   window.EVENTS.forEach(e=>IDX.push({k:e[1]+" "+(e._k||""),label:e[1],tag:U.tagEvent+" · "+fmtY(e[0]),go:()=>gotoEvent(e)}));
@@ -518,6 +541,7 @@ function readHash(){
   m=h.match(/(?:^|-)p-([a-z]+)/);if(m)return startJourney(m[1]);
   m=h.match(/(?:^|-)c-([a-z0-9]+)/);if(m&&cityById[m[1]]){const y=year;cityCard(cityById[m[1]]);setYear(y);return}
   m=h.match(/(?:^|-)m-([a-z0-9-]+?)(?:-[rl]-|$)/);if(m&&window.LANDMARKS){const o=window.LANDMARKS.find(x=>x.id===m[1]);if(o)return landmarkCard(o)}
+  m=h.match(/(?:^|-)t-([a-z-]+?)(?:-[rl]-|$)/);if(m&&window.ROUTES){const o=window.ROUTES.find(x=>x.id===m[1]);if(o)return routeCard(o)}
   m=h.match(/(?:^|-)s-([a-z0-9]+)/);if(m&&siteById[m[1]])return siteCard(siteById[m[1]]);
 }
 window.addEventListener("hashchange",()=>{if(ATLAS)readHash()});

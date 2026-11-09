@@ -38,6 +38,10 @@ if(!zh){
   m._k=[m.n.zh,m.n.en,m.country].join(" ");
   const th=m.img.then; if(th) th.C=L==="zh-Hant"?th.capZht:zh?th.capZh:th.cap;
 });
+(window.ROUTES||[]).forEach(r=>{
+  r.N=L==="zh-Hant"?r.n.zht:zh?r.n.zh:(r.n[L]||r.n.en); r.D=L==="zh-Hant"?r.d.zht:zh?r.d.zh:r.d.en;
+  r.pts.forEach(p=>{if(p[2])p.L=L==="zh-Hant"?(p[4]||p[3]):zh?(p[3]||p[2]):p[2]});
+});
 // 静态界面
 document.documentElement.lang=L; document.title=U.title+(zh?" · ":" · ")+U.sub.split(" · ")[0];
 if(!zh) document.body.classList.add("latin");

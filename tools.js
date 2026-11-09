@@ -28,7 +28,7 @@
 
   let META, PHYS;
   const SNAP = {};
-  const loadMeta = () => Promise.all([d3.json('/tools/meta.json' + V), d3.json('/physical.json' + V)]).then(([m, p]) => { META = m; PHYS = p; });
+  const loadMeta = () => Promise.all([d3.json('/data/tools-meta.json' + V), d3.json('/physical.json' + V)]).then(([m, p]) => { META = m; PHYS = p; });
   const loadSnap = s => SNAP[s] || (SNAP[s] = d3.json(`/atlas/${s}.json` + V));
   const nm = n => (META.names[n] ? META.names[n][0] : n);
   const col = n => (META.names[n] ? META.names[n][1] : '#c9b48a');
@@ -215,6 +215,142 @@ ${list('Appear', app, x => fmtKm2(x.a))}${list('Disappear', van, x => fmtKm2(x.a
     });
   }
 
+
+  // ===================== TRUE SIZE =====================
+  function size(root) {
+    const S = META.snaps, PRE = META.sizePresets;
+    root.innerHTML = `<div class="presets">${PRE.map((p, i) => `<button class="chip" data-i="${i}">${esc(p[0])}</button>`).join('')}</div>
+<div class="ctrls"><label>Year <select id="sy">${S.map(s => `<option value="${s}">${fy(s)}</option>`).join('')}</select></label><label>State <select id="sn"></select></label> <button class="btn ghost" id="sreset">Back to original place</button></div>
+<div class="mapbox sizebox"><svg id="smap"></svg></div>
+<p class="muted">Drag the red shape. It is rotated on the globe as it moves, so it keeps its true size; the map projection stretches everything near the poles, just like the countries underneath.</p><div id="sout"></div>`;
+    const $ = s => root.querySelector(s), svgEl = $('#smap');
+    let snap, name, G, c0, tgt, p, path, modern, mAreas;
+    const R2 = 6371 * 6371;
+    const rotated = () => { const r1 = d3.geoRotation([-c0[0], -c0[1]]), r2 = d3.geoRotation([-tgt[0], -tgt[1]]).invert, f = q => r2(r1(q)); const m = c => (typeof c[0] === 'number' ? f(c) : c.map(m)); return { type: G.type, coordinates: m(G.coordinates) }; };
+    const base = () => {
+      p = proj('world'); path = d3.geoPath(p);
+      drawMap(svgEl, modern, 'world', { labels: true, max: 30 });
+      const svg = d3.select(svgEl); svg.selectAll('g:nth-of-type(1) path').attr('fill-opacity', 0.28);
+      svg.append('path').attr('id', 'sghost').attr('fill', 'none').attr('stroke', '#a8322a').attr('stroke-dasharray', '5 4').attr('stroke-width', 1.4);
+      svg.append('path').attr('id', 'sshape').attr('fill', '#a8322a').attr('fill-opacity', 0.55).attr('stroke', '#7d1f19').attr('stroke-width', 1.6).style('cursor', 'grab');
+    };
+    const draw = () => { d3.select('#sghost').attr('d', path(G)); d3.select('#sshape').attr('d', path(rotated())); };
+    const info = () => {
+      const a = d3.geoArea(G) * R2, cmp = mAreas.map(([n, b]) => [n, a / b]).sort((x, y) => Math.abs(Math.log(x[1])) - Math.abs(Math.log(y[1])));
+      const pick = [...new Map([...cmp.slice(0, 3), ...cmp.filter(x => /United States|China/.test(x[0]))].map(x => [x[0], x])).values()].slice(0, 4);
+      $('#sout').innerHTML = `<h2>${esc(nm(name))} in ${fy(snap)}</h2><p class="lead2">About <b>${fmtKm2(a)}</b>${pick.length ? ' — ' + pick.map(([n, r]) => `${r >= 1 ? r.toFixed(1) + '×' : Math.round(r * 100) + '% of'} ${esc(n)}`).join(', ') : ''}.</p>
+<p>${META.names[name] && META.names[name][3] ? `<a href="/en/state/${META.names[name][3]}">${esc(nm(name))}: borders over time</a> · ` : ''}<a href="${yearPage(snap, regionOf(c0))}">${fy(snap)} map</a> · <a href="/size#${snap}-${encodeURIComponent(name)}">Link to this comparison</a></p>`;
+    };
+    const fillStates = fc => { const L = regionStates(fc, 'world').filter(x => x.a > 150000).slice(0, 80); $('#sn').innerHTML = L.map(x => `<option value="${esc(x.n)}">${esc(nm(x.n))} · ${fmtKm2(x.a)}</option>`).join(''); return L; };
+    const choose = (s, n) => loadSnap(s).then(fc => {
+      snap = s; $('#sy').value = s; const L = fillStates(fc); name = n && L.some(x => x.n === n) ? n : L[0].n; $('#sn').value = name;
+      const fs = fc.features.filter(f => f.properties.n === name); G = fs.length === 1 ? fs[0].geometry : { type: 'MultiPolygon', coordinates: fs.flatMap(f => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates)) };
+      let best = G; if (G.type === 'MultiPolygon') { let ba = -1; for (const c of G.coordinates) { const pg = { type: 'Polygon', coordinates: c }; const a = d3.geoArea(pg); if (a > ba) { ba = a; best = pg; } } }
+      c0 = d3.geoCentroid(best); tgt = c0.slice(); draw(); info(); history.replaceState(null, '', `#${s}-${encodeURIComponent(name)}`);
+    });
+    const toGeo = e => { const r = svgEl.getBoundingClientRect(); return p.invert([((e.clientX - r.left) / r.width) * 1200, ((e.clientY - r.top) / r.height) * 800]); };
+    let drag = null;
+    svgEl.addEventListener('pointerdown', e => { if (e.target.id !== 'sshape') return; drag = { g: toGeo(e), t: tgt.slice() }; svgEl.setPointerCapture(e.pointerId); e.target.style.cursor = 'grabbing'; e.preventDefault(); });
+    svgEl.addEventListener('pointermove', e => { if (!drag) return; const g = toGeo(e); if (!g) return; tgt = [drag.t[0] + (g[0] - drag.g[0]), Math.max(-80, Math.min(80, drag.t[1] + (g[1] - drag.g[1])))]; draw(); });
+    svgEl.addEventListener('pointerup', () => { drag = null; d3.select('#sshape').style('cursor', 'grab'); });
+    $('#sreset').onclick = () => { tgt = c0.slice(); draw(); };
+    $('#sy').onchange = e => choose(+e.target.value);
+    $('#sn').onchange = e => choose(snap, e.target.value);
+    root.querySelectorAll('.chip').forEach(c => (c.onclick = () => { const q = PRE[+c.dataset.i]; choose(q[1], q[2]); }));
+    loadSnap(2010).then(fc => {
+      modern = fc;
+      const want = [['United States', /^United States/], ['Russia', /^Russia/], ['China', /^China$|People's Republic of China/], ['Brazil', /^Brazil/], ['Australia', /^Australia$/], ['India', /^India$/], ['Canada', /^Canada$/], ['France', /^France$/], ['Mexico', /^Mexico$/], ['Egypt', /^Egypt$/]];
+      mAreas = want.map(([lab, re]) => [lab, fc.features.filter(f => re.test(f.properties.n || '')).reduce((s, f) => s + d3.geoArea(f) * R2, 0)]).filter(x => x[1] > 0);
+      base();
+      const m = location.hash.match(/^#(-?\d+)-(.+)$/); if (m && S.includes(+m[1])) choose(+m[1], decodeURIComponent(m[2])); else choose(PRE[0][1], PRE[0][2]);
+    });
+  }
+
+  // ===================== ANIMATE =====================
+  function animate(root) {
+    const S = META.snaps;
+    const opt = (v, list, f = x => x) => list.map(x => `<option value="${x}"${x === v ? ' selected' : ''}>${f(x)}</option>`).join('');
+    root.innerHTML = `<div class="ctrls"><label>Region <select id="ar">${Object.keys(REGIONS).map(k => `<option value="${k}">${REGIONS[k].name}</option>`).join('')}</select></label>
+<label>From <select id="af">${opt(-500, S, fy)}</select></label><label>To <select id="at">${opt(S[S.length - 1], S, fy)}</select></label>
+<label>Seconds per map <select id="as">${opt('0.8', ['0.4', '0.8', '1.2', '2'])}</select></label>
+<label>Shape <select id="aa"><option value="land">Landscape 3:2</option><option value="square">Square 1:1</option><option value="vertical">Vertical 9:16 (Shorts, TikTok)</option></select></label>
+<label>Format <select id="ak"><option value="video">Video</option><option value="gif">GIF</option></select></label></div>
+<p><button class="btn" id="ago">Create animation</button> <span id="amsg" class="muted"></span></p>
+<div class="animbox"><canvas id="acv"></canvas></div><div id="aout"></div>`;
+    const $ = s => root.querySelector(s), cv = $('#acv'), ctx = cv.getContext('2d');
+    const DIM = { land: [1200, 800, 0, 800], square: [1080, 1080, 120, 800], vertical: [1080, 1920, 300, 1260] };
+    function frame(fc, s, region, shape, title) {
+      const [w, h, top, mh] = DIM[shape];
+      cv.width = w; cv.height = h;
+      ctx.fillStyle = '#f3ead6'; ctx.fillRect(0, 0, w, h);
+      const pr = d3.geoProjection(millerRaw).rotate([-11, 0]).fitExtent([[0, top], [w, top + mh]], boxPts(REGIONS[region].box)), pa = d3.geoPath(pr, ctx);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, top, w, mh); ctx.clip();
+      ctx.fillStyle = '#c9d3c8'; ctx.fillRect(0, top, w, mh);
+      ctx.beginPath(); pa(PHYS.land); ctx.fillStyle = '#eadfc4'; ctx.fill();
+      for (const f of named(fc)) { ctx.beginPath(); pa(f); ctx.globalAlpha = tribal(f.properties.n) ? 0.3 : 0.62; ctx.fillStyle = col(f.properties.n); ctx.fill(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#5a4630'; ctx.lineWidth = 0.8; ctx.stroke(); ctx.globalAlpha = 1; }
+      ctx.beginPath(); pa(PHYS.land); ctx.strokeStyle = 'rgba(125,106,76,.7)'; ctx.lineWidth = 0.9; ctx.stroke();
+      const placed = []; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+      for (const x of regionStates(fc, region).slice(0, 40)) {
+        if (placed.length >= 12) break;
+        const f = fc.features.find(g => g.properties.n === x.n); let geo = f.geometry, best = geo;
+        if (geo.type === 'MultiPolygon') { let ba = -1; for (const c of geo.coordinates) { const pg = { type: 'Polygon', coordinates: c }; const a = d3.geoArea(pg); if (a > ba) { ba = a; best = pg; } } }
+        const c = d3.geoPath(pr).centroid(best); if (!isFinite(c[0]) || c[0] < 40 || c[0] > w - 40 || c[1] < top + 20 || c[1] > top + mh - 20) continue;
+        const fz = Math.max(15, Math.min(30, 8 + Math.sqrt(d3.geoPath(pr).area(best)) * 0.05)) * (shape === 'land' ? 1 : 1.35); ctx.font = `700 ${fz}px Georgia, serif`;
+        const tw = ctx.measureText(nm(x.n)).width + 8, bx = [c[0] - tw / 2, c[1] - fz, c[0] + tw / 2, c[1] + 4];
+        if (placed.some(q => !(bx[2] < q[0] || bx[0] > q[2] || bx[3] < q[1] || bx[1] > q[3]))) continue; placed.push(bx);
+        ctx.strokeStyle = '#efe4cb'; ctx.lineWidth = 4; ctx.strokeText(nm(x.n), c[0], c[1]); ctx.fillStyle = '#3a2a1a'; ctx.fillText(nm(x.n), c[0], c[1]);
+      }
+      ctx.restore();
+      ctx.textAlign = 'left'; ctx.fillStyle = '#2b2118';
+      if (shape === 'land') {
+        ctx.fillStyle = 'rgba(43,33,24,.88)'; ctx.fillRect(0, h - 74, w, 74);
+        ctx.fillStyle = '#f6e9cf'; ctx.font = '700 46px Georgia, serif'; ctx.fillText(fy(s), 28, h - 22);
+        ctx.font = '24px Georgia, serif'; ctx.fillStyle = '#e3c9a0'; ctx.fillText(title, 260, h - 28);
+        ctx.textAlign = 'right'; ctx.fillText('chronicamaps.com', w - 24, h - 28);
+      } else {
+        ctx.font = `700 ${shape === 'vertical' ? 62 : 46}px Georgia, serif`; ctx.textAlign = 'center'; ctx.fillText(title, w / 2, top / 2 + 18);
+        ctx.font = `700 ${shape === 'vertical' ? 150 : 84}px Georgia, serif`; ctx.fillStyle = '#a8322a'; ctx.fillText(fy(s), w / 2, top + mh + (shape === 'vertical' ? 190 : 100));
+        ctx.font = '34px Georgia, serif'; ctx.fillStyle = '#5b4a36'; ctx.fillText('chronicamaps.com', w / 2, h - (shape === 'vertical' ? 70 : 22));
+      }
+    }
+    $('#ago').onclick = async () => {
+      const region = $('#ar').value, shape = $('#aa').value, kind = $('#ak').value, sec = +$('#as').value;
+      let a = +$('#af').value, b = +$('#at').value; if (a > b) [a, b] = [b, a];
+      const list = S.filter(s => s >= a && s <= b); if (list.length < 2) { $('#amsg').textContent = 'Pick at least two maps.'; return; }
+      const title = `${REGIONS[region].name}, ${fy(a)} – ${fy(b)}`, btn = $('#ago'); btn.disabled = true; $('#aout').innerHTML = '';
+      const msg = t => ($('#amsg').textContent = t);
+      msg('Loading maps…'); const fcs = []; for (const s of list) fcs.push(await loadSnap(s));
+      const frames = [];
+      for (let i = 0; i < list.length; i++) { msg(`Drawing ${i + 1} / ${list.length}…`); frame(fcs[i], list[i], region, shape, title); frames.push(await createImageBitmap(cv)); await new Promise(r => setTimeout(r, 0)); }
+      const fname = `chronicamaps-${region}-${yearSlug(a)}-${yearSlug(b)}`;
+      try {
+        if (kind === 'gif') {
+          const { GIFEncoder, quantize, applyPalette } = await import('/vendor/gifenc.esm.js');
+          const sc = shape === 'vertical' ? 0.5 : 0.6, gw = Math.round(cv.width * sc), gh = Math.round(cv.height * sc), oc = document.createElement('canvas'); oc.width = gw; oc.height = gh; const ox = oc.getContext('2d');
+          const gif = GIFEncoder();
+          for (let i = 0; i < frames.length; i++) { msg(`Encoding GIF ${i + 1} / ${frames.length}…`); ox.drawImage(frames[i], 0, 0, gw, gh); const data = ox.getImageData(0, 0, gw, gh).data, pal = quantize(data, 256), idx = applyPalette(data, pal); gif.writeFrame(idx, gw, gh, { palette: pal, delay: Math.round(sec * 1000) * (i === frames.length - 1 ? 3 : 1) }); await new Promise(r => setTimeout(r, 0)); }
+          gif.finish(); done(new Blob([gif.bytes()], { type: 'image/gif' }), fname + '.gif');
+        } else {
+          const types = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'], type = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+          if (!type) { msg('Video recording is not supported in this browser; choose GIF.'); btn.disabled = false; return; }
+          const stream = cv.captureStream(30), rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6e6 }), chunks = [];
+          rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+          const stopped = new Promise(r => (rec.onstop = r)); rec.start();
+          for (let i = 0; i < frames.length; i++) {
+            msg(`Recording ${i + 1} / ${frames.length}…`); const hold = sec * 1000 * (i === frames.length - 1 ? 2.5 : 1), t0 = performance.now();
+            while (performance.now() - t0 < hold) { ctx.drawImage(frames[i], 0, 0); await new Promise(r => setTimeout(r, 1000 / 30)); }
+          }
+          rec.stop(); await stopped; done(new Blob(chunks, { type: type.split(';')[0] }), fname + (type.includes('mp4') ? '.mp4' : '.webm'));
+        }
+      } catch (e) { msg('Something went wrong: ' + e.message); }
+      btn.disabled = false;
+      function done(blob, fn) { const u = URL.createObjectURL(blob); msg(`Done — ${(blob.size / 1048576).toFixed(1)} MB.`); $('#aout').innerHTML = `<p><a class="btn" href="${u}" download="${fn}">Download ${esc(fn)}</a></p><p class="muted">Free to post anywhere; please keep the chronicamaps.com credit visible.</p>`; }
+    };
+    loadSnap(-500).then(fc => frame(fc, -500, 'europe', 'land', 'Europe, 500 BC – 2010'));
+    $('#ar').onchange = () => loadSnap(+$('#af').value).then(fc => frame(fc, +$('#af').value, $('#ar').value, $('#aa').value, `${REGIONS[$('#ar').value].name}`));
+    $('#aa').onchange = $('#ar').onchange; $('#af').onchange = $('#ar').onchange;
+  }
+
   const root = document.querySelector('[data-tool]');
-  if (root) loadMeta().then(() => ({ daily, compare, town })[root.dataset.tool](root.querySelector('.tool')));
+  if (root) loadMeta().then(() => ({ daily, compare, town, size, animate })[root.dataset.tool](root.querySelector('.tool')));
 })();
