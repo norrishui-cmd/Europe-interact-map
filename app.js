@@ -327,7 +327,9 @@ function openPanel(h){d3.select("#pbody").html(h);d3.select("#panel").classed("s
 window.closePanel=function(){d3.select("#panel").classed("show",false);if(journey)endJourney();writeHash()};
 function bindYearLinks(){d3.selectAll("#pbody [data-y]").on("click",function(){const y=+this.dataset.y;stopPlay();setYear(y);if(this.dataset.ll){const ll=JSON.parse(this.dataset.ll);flyTo(ll);pulse(ll)}writeHash()});
   d3.selectAll("#pbody [data-city]").on("click",function(){cityCard(cityById[this.dataset.city])});
-  d3.selectAll("#pbody [data-site]").on("click",function(){siteCard(siteById[this.dataset.site])});}
+  d3.selectAll("#pbody [data-site]").on("click",function(){siteCard(siteById[this.dataset.site])});
+  d3.selectAll("#pbody [data-person]").on("click",function(){const p=personById[this.dataset.person];if(p)personCard(p)});
+  d3.selectAll("#pbody [data-city]").on("click",function(){const c=cityById[this.dataset.city];if(c)cityCard(c)});}
 
 function polityAt0(ll,s){for(const f of feats(s)){if(f.properties.n&&f.properties.n.trim()&&d3.geoContains(f,ll))return f.properties.n}return null}
 function polityAt(ll,s){let n=polityAt0(ll,s);if(n)return n;for(const r of [.1,.2,.35])for(let a=0;a<8;a++){const p=[ll[0]+r*Math.cos(a*Math.PI/4)/Math.cos(ll[1]*Math.PI/180),ll[1]+r*Math.sin(a*Math.PI/4)];n=polityAt0(p,s);if(n)return n}return null}
@@ -352,6 +354,18 @@ function histHTML(rows){
   return `<div class="sec">${U.territory}</div><table>${rows.map(r=>`<tr><td class="y" data-y="${r.from}">${fmtY(r.from)}–${r.to>=MAXY?U.now:fmtY(r.to)}</td><td>${r.n?`<span class="sw2" style="background:${colorOf(r.n)}"></span>${esc(zhOf(r.n))} <span class="latin" style="font-size:12px">${esc(window.secName(r.n))}</span>`:`<span style="color:#9a8a6a">${U.noData}</span>`}</td></tr>`).join("")}</table>`;
 }
 function nearbySites(ll,km){return window.SITES.filter(s=>d3.geoDistance(s.c,ll)*6371<km).sort((a,b)=>a.y-b.y)}
+const personById={};(window.PEOPLE||[]).forEach(p=>personById[p.id]=p);
+function peopleOf(id){return (window.PEOPLE||[]).filter(p=>p.at.indexOf(id)>=0).sort((a,b)=>a.y[0]-b.y[0])}
+function personCard(p){
+  stopPlay();
+  const cs=p.at.map(id=>cityById[id]).filter(Boolean), ll=p.c||(cs[0]&&cs[0].c);
+  const yrs=`${p.ca?"c. ":""}${fmtY(p.y[0])} – ${fmtY(p.y[1])}`;
+  openPanel(`<h2>${esc(p.N)}</h2><div class="latin">${p.N2?esc(p.N2)+" · ":""}${esc(p.R)}</div><div class="bio">${esc(p.D)}</div>
+  <table><tr><td class="y" data-y="${Math.max(MINY,p.y[0])}"${ll?` data-ll='${JSON.stringify(ll)}'`:""}>${yrs}</td><td>${p.PL?`${U.birthplace||"Birthplace"}${U.colon||": "}${esc(p.PL)}`:""}</td></tr></table>
+  ${cs.length?`<div class="sec">${U.places||"Places"}</div><table>${cs.map(c=>`<tr><td><a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a></td></tr>`).join("")}</table>`:""}`);
+  setYear(Math.max(MINY,Math.min(p.y[1],p.y[0]+30)));
+  if(ll){flyTo(ll);pulse(ll)}lastCard="h-"+p.id;writeHash();
+}
 function cityCard(c){
   stopPlay();
   const cur=nameAt(c,year)||c.names[0];
@@ -361,6 +375,7 @@ function cityCard(c){
   <div class="sec">${U.names}</div><table>${c.names.map(n=>`<tr><td class="y" data-y="${Math.max(MINY,n[0])}">${fill(U.since,{y:fmtY(n[0])})}</td><td><b>${esc(n[1])}</b>${n[2]?` · <span style="color:#7a6648">${esc(n[2])}</span>`:""}</td></tr>`).join("")}</table>
   <div class="sec">${U.events}</div><table>${evs.map(e=>`<tr><td class="y" data-y="${Math.max(MINY,e[0])}" data-ll='${JSON.stringify(c.c)}'>${fmtY(e[0])}</td><td>${esc(e[1])}</td></tr>`).join("")}</table>
   ${ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""}
+  ${peopleOf(c.id).length?`<div class="sec">${U.people||"Notable people"}</div><table>${peopleOf(c.id).map(p=>`<tr><td class="y" data-y="${Math.max(MINY,p.y[0])}">${fmtY(p.y[0])}</td><td><a href="javascript:void 0" data-person="${p.id}">${esc(p.N)}</a> · <span style="color:#7a6648">${esc(p.R)}</span></td></tr>`).join("")}</table>`:""}
   ${historyTable(c.c,"c-"+c.id)}`);
   flyTo(c.c);pulse(c.c);lastCard="c-"+c.id;writeHash();
 }
@@ -503,6 +518,7 @@ function buildIndex(){
   IDX=[];
   window.CITIES.forEach(c=>IDX.push({k:[c.zh,c._k||"",...c.names.map(n=>n[1])].join(" "),label:c.zh,tag:U.tagCity+" · "+c.names[0][1],go:()=>cityCard(c)}));
   (window.LANDMARKS||[]).forEach(m=>IDX.push({k:[m.N,m.N2,m._k].join(" "),label:m.N,tag:`${U.tagLandmark} · ${m.C}`,go:()=>landmarkCard(m)}));
+  (window.PEOPLE||[]).forEach(p=>IDX.push({k:[p.N,p._k,p.R].join(" "),label:p.N,tag:`${U.tagPerson||"Person"} · ${fmtY(p.y[0])}–${fmtY(p.y[1])}`,go:()=>personCard(p)}));
   window.SITES.forEach(s=>IDX.push({k:s.zh+" "+(s._k||""),label:s.zh,tag:`${s.k==="battle"?U.tagBattle:U.tagSite} · ${fmtY(s.y)}`,go:()=>siteCard(s)}));
   (window.ROUTES||[]).forEach(r=>IDX.push({k:[r.N,r.n.en,r.n.zh].join(" "),label:r.N,tag:`${U.tagRoute} · ${fmtY(r.y[0])}–${fmtY(r.y[1])}`,go:()=>routeCard(r)}));
   window.JOURNEYS.forEach(j=>IDX.push({k:j.zh+" "+j.who+" "+(j._k||""),label:j.zh,tag:U.tagJourney+" · "+j.span,go:()=>startJourney(j.id)}));
@@ -547,6 +563,7 @@ function readHash(){
   m=h.match(/(?:^|-)m-([a-z0-9-]+?)(?:-[rl]-|$)/);if(m&&window.LANDMARKS){const o=window.LANDMARKS.find(x=>x.id===m[1]);if(o)return landmarkCard(o)}
   m=h.match(/(?:^|-)t-([a-z-]+?)(?:-[rl]-|$)/);if(m&&window.ROUTES){const o=window.ROUTES.find(x=>x.id===m[1]);if(o)return routeCard(o)}
   m=h.match(/(?:^|-)s-([a-z0-9]+)/);if(m&&siteById[m[1]])return siteCard(siteById[m[1]]);
+  m=h.match(/(?:^|-)h-([a-z0-9-]+?)(?:-[rl]-|$)/);if(m&&personById[m[1]]){const y=year;personCard(personById[m[1]]);setYear(y);return}
 }
 window.addEventListener("hashchange",()=>{if(ATLAS)readHash()});
 })();

@@ -38,6 +38,10 @@ if(!zh){
   m._k=[m.n.zh,m.n.en,m.country].join(" ");
   const th=m.img.then; if(th) th.C=L==="zh-Hant"?th.capZht:zh?th.capZh:th.cap;
 });
+(window.PEOPLE||[]).forEach(p=>{
+  p.N=zh?p.n.zh:p.n.en; p.N2=zh?p.n.en:""; p.R=zh?p.r.zh:p.r.en; p.D=zh?p.d.zh:p.d.en; p.PL=p.pl?(zh?p.pl.zh:p.pl.en):"";
+  p._k=[p.n.zh,p.n.en].join(" ");
+});
 (window.ROUTES||[]).forEach(r=>{
   r.N=L==="zh-Hant"?r.n.zht:zh?r.n.zh:(r.n[L]||r.n.en); r.D=L==="zh-Hant"?r.d.zht:zh?r.d.zh:r.d.en;
   r.pts.forEach(p=>{if(p[2])p.L=L==="zh-Hant"?(p[4]||p[3]):zh?(p[3]||p[2]):p[2]});
