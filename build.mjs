@@ -15,7 +15,7 @@ const R_KM = 6371;
 // ---------- load content (same files the app uses) ----------
 const ctx = { window: {} };
 vm.createContext(ctx);
-for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_world2.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'content_world2_en.js', 'landmarks.js', 'routes.js']) {
+for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_world2.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'content_world2_en.js', 'landmarks.js', 'routes.js', 'featured.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window, E = W.CONTENT_EN;
@@ -209,7 +209,9 @@ function mapSVG(s, r = 'europe') {
 // ---------- page template ----------
 const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
-function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool }) {
+const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
+const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
+function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogType = 'article' }) {
   body = body.replace(/<!--EMBED:([^>]*)-->/, (_, h) => embedBox(h, url, h1.replace(/&amp;/g, '&').replace(/<[^>]+>/g, ''))).replace(/<!--EMBED:[^>]*-->/g, '');
   if (!ogImage) { const m = body.match(/src="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
   if (!ogImage) ogImage = '/og/world-1500.jpg';
@@ -224,7 +226,7 @@ function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool }) {
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${SITE}${url}">
-<meta property="og:type" content="article">
+<meta property="og:type" content="${ogType}">
 <meta property="og:site_name" content="Chronica Maps">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
@@ -241,8 +243,9 @@ ${lds}
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((c, i) => (i < crumbs.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a>` : `<span>${esc(c[0])}</span>`)).join(' › ')}</nav>
 <h1>${h1}</h1>
 ${body}
+${featAside(url)}
 </main>${tool ? `\n<script>window.APP_V="${VER}"</script><script src="/vendor/d3.min.js"></script><script src="/tools.js?v=${VER}"></script>` : ''}
-<footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth. Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>.</p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
+<footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth. Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>.</p><p><a href="/about">About</a> · <a href="/guide">How to use the map</a> · <a href="/en/topics">Featured topics</a> · <a href="/en/anniversaries/${new Date().getUTCFullYear()}">Anniversaries</a></p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
 </body>
 </html>`;
 }
@@ -613,6 +616,80 @@ hub('/en/journeys', 'Historical Journeys on a Map: Routes and Timelines', 'Histo
   `<ul class="links">${JOURNEYS.map(j => `<li><a href="/en/journey/${j.id}">${esc(j.title)}</a> · ${esc(j.span)} · ${esc(j.who)}</li>`).join('')}</ul>`, 'Journeys');
 hub('/en/eras', 'Eras of History by Region: Maps and Timelines', 'Eras of History', `${ALL_ERAS.length} periods of history in Europe, Asia, Africa, the Americas and Oceania, each with its maps, events and battles.`,
   ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<h2>${RNAME(r)}</h2>` + table(['Era', 'Period'], ALL_ERAS.filter(e => e.region === r).map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`]))).join(''), 'Eras');
+
+// ---------- about, guide, featured topics, anniversaries ----------
+const md = t => esc(t).replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, '<a href="$2">$1</a>');
+const fdate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: SITE, logo: SITE + '/favicon.svg' };
+add('/about', page({ url: '/about', title: 'About Chronica Maps: An Interactive Historical Atlas', ogType: 'website',
+  desc: 'Chronica Maps is a free interactive atlas of world history: 2,500 years of borders, cities, battles, landmarks, journeys and trade routes. Sources, methods and how to cite.',
+  h1: 'About Chronica Maps', crumbs: [['Home', '/'], ['About', '/about']],
+  body: `<p class="lead">Chronica Maps is a free interactive atlas of world history. Drag a timeline from ${fy(SNAPS[0])} to today and watch the borders of Europe, Asia, Africa, the Americas and Oceania change, with the cities, battles, landmarks, journeys and trade routes of each period placed on the map of its time.</p>
+<h2>What the atlas contains</h2>
+<ul class="links"><li><a href="/en/world">${SNAPS.length} border maps</a> from ${fy(SNAPS[0])} to ${fy(SNAPS.at(-1))}</li><li><a href="/en/cities">${CITIES.length} historic cities</a> with timelines and the states that ruled them</li><li><a href="/en/battles">${SITES.length} battles and historic sites</a> and ${EVENTS.length} dated events</li><li><a href="/en/landmarks">${LMS.length} landmarks</a> shown then and now</li><li><a href="/en/journeys">${JOURNEYS.length} journeys</a> and <a href="/en/routes">${ROUTES.length} trade routes</a></li><li><a href="/en/towns">${TOWN_PAGES.length} town histories</a>, and a search over ${TOWNS.t.length.toLocaleString('en-US')} towns</li><li>Five free <a href="/tools">tools</a>: a daily puzzle, a two-year comparison, town history, true size of empires and border animations</li></ul>
+<p>The interface is available in English, German, French, Spanish and Chinese (simplified and traditional).</p>
+<h2>Sources and method</h2>
+<p>State borders come from the open <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> dataset (GPL-3.0), with some names corrected where a snapshot used a state that did not yet exist or no longer existed. Coastlines, lakes and rivers come from <a href="https://www.naturalearthdata.com/">Natural Earth</a>, and town positions from Natural Earth populated places. Landmark photographs come from Wikimedia Commons; each image is credited with its author and licence on its page.</p>
+<p>The texts on cities, battles, landmarks and routes are written for this atlas and summarise standard reference works.</p>
+<h2>How accurate are the borders?</h2>
+<p>Every map is a snapshot of one year, and the gaps between snapshots can be long. Pre-modern borders were rarely fixed lines: many areas were contested, held through tributaries, or not governed by any state at all. Treat the borders as schematic approximations. Where a place lies near a frontier, the atlas may assign it to a neighbouring state. If you spot an error, the dataset is open and corrections are welcome.</p>
+<h2>Using and citing the maps</h2>
+<p>You may link to any page and embed the interactive map on blogs, course sites and school pages with the embed code shown under each map; please keep the credit line. Animations made with the <a href="/animate">animation tool</a> are free to share with the chronicamaps.com credit visible.</p>
+<p>Suggested citation: <i>Chronica Maps: Interactive Historical Atlas</i>, ${SITE}, accessed [date].</p>
+<h2>Credits</h2>
+<p>Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>. Maps are drawn with <a href="https://d3js.org/">D3</a>.</p>
+<p><a class="btn" href="/">Open the interactive map</a> <a class="btn" href="/guide">How to use it</a></p>`,
+  ld: [{ '@context': 'https://schema.org', '@type': 'AboutPage', name: 'About Chronica Maps', url: SITE + '/about', about: ORG }, { '@context': 'https://schema.org', ...ORG }] }));
+{
+  const G = [
+    ['Move through time', 'Drag the timeline at the bottom of the screen, or press ▶ to play the maps in order. The era bands above the timeline jump to the start of a period. On a keyboard, the left and right arrow keys step one map back or forward.', 'Europe in 1453 with the timeline at the bottom', `y1453`],
+    ['Open a city, battle or landmark', 'Click a dot to open its card: a short history, the states that ruled the place over time, and links to nearby places. Click an empty spot of land, or double-click anywhere, to see who ruled that exact point.', 'The Istanbul card in the interactive map', `y1453-c-istanbul`],
+    ['Switch region', 'The region buttons at the top zoom to Europe, Asia, Africa, the Americas or Oceania, or show the whole world. You can also scroll or pinch to zoom and drag to pan.', 'The world in 1500', `y1500-r-world`],
+    ['Follow a journey', 'Under the journeys layer you can follow Alexander, Genghis Khan, Marco Polo, Zheng He, Columbus, Napoleon and others stop by stop. The map moves to each stop and the year changes with it.', 'Napoleon’s journey on the map', `p-napoleon`],
+    ['See landmarks then and now', 'Landmarks such as the Taj Mahal, the Colosseum and the Great Wall show a historical view next to a photo of the site today.', 'The Taj Mahal landmark card', `y1700-m-taj-mahal`],
+    ['Turn on trade routes', 'The trade routes layer draws the Silk Road, the Incense Route, the Hanseatic routes and others for the years they were active. Click a route for its stops and history.', 'The Silk Road on the map of Asia in 800', `y800-t-silk-road-r-asia`],
+    ['Test yourself', 'The quiz mode asks you to find cities and states on the map of a given year. There is also a <a href="/daily">daily puzzle</a> where you guess the year of an unlabelled map.', 'The map quiz', `quiz`],
+    ['Compare with today', 'Turn on modern borders to draw today’s countries over any historical map, or previous borders to see what changed since the last map. For a side-by-side view, use the <a href="/compare">compare tool</a>.', 'Europe in 1914 with modern borders overlaid', `y1914`]];
+  const qa = [['Is Chronica Maps free?', 'Yes. The map, the tools and all pages are free to use, with no account needed.'], ['Does it work on phones?', 'Yes. Pinch to zoom, drag to pan and tap a place to open its card. The timeline sits at the bottom of the screen.'], ['Can I link to a specific year or place?', 'Yes. The address bar updates as you move, so you can copy it to share the exact year, region and card you are looking at.'], ['Can I use the map in class or on my website?', 'Yes. Most pages have an <i>Embed this interactive map</i> box with code you can paste into a blog or course page.']];
+  add('/guide', page({ url: '/guide', title: 'How to Use the Interactive History Map: A Quick Guide | Chronica Maps', ogImage: '/guide-1.jpg',
+    desc: 'A step-by-step guide to the Chronica Maps interactive historical atlas: the timeline, city and battle cards, regions, journeys, landmarks, trade routes, the quiz and modern borders.',
+    h1: 'How to Use the Interactive Map', crumbs: [['Home', '/'], ['Guide', '/guide']],
+    body: `<p class="lead">Chronica Maps shows 2,500 years of borders on one map. These eight steps cover everything it can do; each takes under a minute to try.</p>
+<ol class="toc">${G.map((g, i) => `<li><a href="#step-${i + 1}">${g[0]}</a></li>`).join('')}</ol>
+${G.map((g, i) => `<section class="step" id="step-${i + 1}"><h2>${i + 1}. ${g[0]}</h2><p>${g[1]}</p><figure class="shot"><img src="/guide-${i + 1}.jpg" width="1200" height="750" alt="${esc(g[2])}" loading="${i ? 'lazy' : 'eager'}" decoding="async"></figure><p><a href="/#${g[3]}-l-en">Try it →</a></p></section>`).join('\n')}
+<h2>Keyboard shortcuts</h2>${table(['Key', 'Action'], [['← →', 'Previous or next map (with Shift: ten years)'], ['Space', 'Play or pause'], ['/', 'Search places'], ['Esc', 'Close a card']])}
+${faq(qa)}
+<p><a class="btn" href="/">Open the interactive map</a></p>`,
+    ld: [{ '@context': 'https://schema.org', '@type': 'HowTo', name: 'How to use the Chronica Maps interactive historical map', image: SITE + '/guide-1.jpg', step: G.map((g, i) => ({ '@type': 'HowToStep', position: i + 1, name: g[0], text: g[1].replace(/<[^>]+>/g, ''), image: `${SITE}/guide-${i + 1}.jpg`, url: `${SITE}/guide#step-${i + 1}` })) }, faqLd(qa)] }));
+}
+for (const f of FEAT) {
+  const [y, rg] = f.map, url = `/en/topics/${f.slug}`;
+  add(url, page({ url, title: `${f.title} | Chronica Maps`, desc: cut(f.desc), h1: esc(f.title), crumbs: [['Home', '/'], ['Featured', '/en/topics'], [f.title, url]],
+    body: `<p class="muted">Published ${fdate(f.date)}</p><p class="lead">${esc(f.desc)}</p>
+${mapBlock(y, `${RNAME(rg)} in ${fy(y)}`, '', rg)}
+${f.body.map(p => `<p>${md(p)}</p>`).join('\n')}
+${openBtn(`${hashYear(y)}${rg === 'europe' ? '' : `-r-${rg}`}`, `Open ${fy(y)} in the interactive map`)}
+${f.links?.length ? `<h2>Related</h2><ul class="links">${f.links.map(([t, u]) => `<li><a href="${u}">${esc(t)}</a></li>`).join('')}</ul>` : ''}`,
+    ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: f.title, description: f.desc, datePublished: f.date, dateModified: f.date, image: `${SITE}${ogUrl(snapFor(y), rg)}`, author: ORG, publisher: ORG, mainEntityOfPage: SITE + url }] }));
+}
+const ANN_YEARS = []; for (let y = 2026; y <= new Date().getUTCFullYear() + 1; y++) ANN_YEARS.push(y);
+hub('/en/topics', 'Featured History Topics and Map Stories', 'Featured Topics', 'Map stories on anniversaries and questions in the news: how wars, treaties and empires changed the map, with border maps you can compare and explore.',
+  `<ul class="toolgrid">${FEAT.map(f => `<li><a href="/en/topics/${f.slug}"><b>${esc(f.title)}</b><span>${esc(f.desc)}</span></a></li>`).join('')}</ul><h2>Anniversaries</h2><ul class="links">${ANN_YEARS.map(y => `<li><a href="/en/anniversaries/${y}">History anniversaries in ${y}</a></li>`).join('')}</ul>`, 'Featured');
+const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+for (const Y of ANN_YEARS) {
+  const items = [];
+  const push = (y, html) => { const d = Y - y; if (y > 0 && d > 0 && d % 25 === 0) items.push({ d, y, html }); };
+  for (const s of SITES) push(s.y, `<a href="/en/battle/${s.id}">${esc(s.title)}</a>`);
+  for (const e of EVENTS) push(e.y, `${esc(e.t)}${e.place ? ` · ${placeLink(e.place)}` : ''}`);
+  for (const c of CITIES) for (const e of c.ev || []) push(e.y, `${esc(e.t)} · <a href="/en/city/${c.id}">${esc(c.name)}</a>`);
+  for (const m of LMS) if (typeof m.y === 'number') push(m.y, `<a href="/en/landmark/${m.id}">${esc(m.name)}</a> (built or begun)`);
+  const seen = new Set(), uniq = items.filter(x => { const k = x.y + '|' + x.html.replace(/<[^>]+>/g, '').slice(0, 40); return seen.has(k) ? false : seen.add(k); });
+  const groups = [...new Set(uniq.map(x => x.d))].sort((a, b) => { const r = d => (d % 100 === 0 ? 0 : d % 50 === 0 ? 1 : 2); return r(a) - r(b) || a - b; });
+  const featHere = FEAT.filter(f => f.date.startsWith(String(Y)));
+  hub(`/en/anniversaries/${Y}`, `History Anniversaries in ${Y}: Battles, Events and Landmarks`, `History Anniversaries in ${Y}`,
+    `${uniq.length} events, battles and landmarks from the atlas that reach a round anniversary in ${Y}, from the ${ord(Math.min(...groups))} to the ${ord(Math.max(...groups))}, each linked to the map of its time.`,
+    `${featHere.length ? `<p>Featured: ${featHere.map(f => `<a href="/en/topics/${f.slug}">${esc(f.title)}</a>`).join(' · ')}</p>` : ''}${groups.map(d => `<h2>${ord(d)} anniversary (${fy(Y - d)})</h2><ul class="links">${uniq.filter(x => x.d === d).map(x => `<li>${x.html}</li>`).join('')}</ul>`).join('')}<p>Other years: ${ANN_YEARS.filter(y => y !== Y).map(y => `<a href="/en/anniversaries/${y}">${y}</a>`).join(' · ')}</p>`, 'Anniversaries');
+}
 hub('/en', 'Historical World Atlas: Maps, Cities, Battles & Timelines', 'Historical Atlas of the World', 'Browse 2,500 years of history in Europe, Asia, Africa and Oceania by year, city, battle, state, era and historical journey, or open the interactive map and drag the timeline.',
   `${openBtn('y1453', 'Open the interactive map')}<ul class="links">${NAV.map(([t, u]) => `<li><a href="${u}">${t}</a></li>`).join('')}<li><a href="/en/quiz">Map quiz</a></li></ul>`, 'Explore');
 

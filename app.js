@@ -81,6 +81,8 @@ Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical
   IDXA=a; PHYS=p; SNAPS=a.snaps; ATLAS={data:SNAP_DATA};
   const h=decodeURIComponent(location.hash.slice(1));const m=h.match(/(?:^|-)r-([a-z]+)/);if(m&&REGIONS[m[1]])region=m[1];
   fit(); transform=regionT(region);svg.call(zoom.transform,transform); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
+  // first visit: show the short tips once (not in embeds, not when a deep link already opened a card)
+  try{if(!document.body.classList.contains('embed')&&!localStorage.getItem('cm_seen_help')){localStorage.setItem('cm_seen_help','1');if(!document.querySelector('#panel.show'))showHelp()}}catch(e){}
   d3.select("#loading").remove();
   d3.json("atlas/hist.json?v="+(window.APP_V||"")).then(h=>{HIST=h}).catch(()=>{});
 }).catch(e=>{d3.select("#loading").text(U.loadFail+e)});
@@ -319,6 +321,8 @@ function stopPlay(){if(playing){clearInterval(playing);playing=null;writeHash()}
 d3.select("#bPrev").on("click",()=>step(-1));d3.select("#bNext").on("click",()=>step(1));d3.select("#bPlay").on("click",togglePlay);
 
 // ---------- 卡片 ----------
+function showHelp(){const t=U.helpTips||window.UI.en.helpTips;openPanel(`<div class="helpbox"><h2>${U.helpT||"How to use the map"}</h2><ol>${t.map(x=>`<li>${x}</li>`).join("")}</ol><div class="hb"><button type="button" id="helpOk">${U.helpOk||"OK"}</button><a href="/guide" target="_blank" rel="noopener">${U.helpMore||"Guide"} →</a></div></div>`);const b=document.getElementById("helpOk");if(b)b.onclick=()=>closePanel()}
+{const hb=document.getElementById("helpBtn");if(hb){hb.title=hb.ariaLabel=U.help||hb.title;hb.onclick=showHelp}}
 function openPanel(h){d3.select("#pbody").html(h);d3.select("#panel").classed("show",true).node().scrollTop=0;bindYearLinks()}
 window.closePanel=function(){d3.select("#panel").classed("show",false);if(journey)endJourney();writeHash()};
 function bindYearLinks(){d3.selectAll("#pbody [data-y]").on("click",function(){const y=+this.dataset.y;stopPlay();setYear(y);if(this.dataset.ll){const ll=JSON.parse(this.dataset.ll);flyTo(ll);pulse(ll)}writeHash()});
