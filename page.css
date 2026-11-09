@@ -58,3 +58,39 @@ ul.lmgrid{list-style:none;padding:0;display:grid;grid-template-columns:repeat(au
 details.embed{margin:.6em 0 1.6em;border:1px solid #d8c6a0;border-radius:6px;padding:.5em .9em;background:#fbf5e8}
 details.embed summary{cursor:pointer;color:#7a2a20;font-weight:600}
 details.embed textarea{width:100%;box-sizing:border-box;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:.5em;border:1px solid #d8c6a0;border-radius:4px;background:#fff;resize:vertical}
+/* interactive tools */
+.tool{margin:1em 0 2em}
+.tool .btn{font:inherit;cursor:pointer;border:0}
+.btn.ghost{background:transparent;color:var(--seal);border:1px solid var(--seal)}
+.tool-head{font-size:15px;color:var(--ink2);margin-bottom:.4em}
+.mapbox{border:1px solid #c9b48a;border-radius:6px;overflow:hidden;background:#c9d3c8;line-height:0}
+.mapbox svg{width:100%;height:auto;display:block}
+.hints p{margin:.4em 0;padding:.4em .8em;background:#fbf5e8;border-left:3px solid #d8b56a;font-size:15.5px}
+.guessrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:.9em 0}
+.guessrow select,.ctrls select{font:inherit;padding:4px 8px;border:1px solid #c9b48a;border-radius:4px;background:#fffdf7}
+.dlog .dl{font-size:16px;margin:.2em 0}
+.result{margin-top:1em;padding:1em 1.2em;border:1px solid #d8c6a0;border-radius:8px;background:#fbf5e8}
+.result .big{font-size:20px;margin:0 0 .4em}
+pre.share{font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid #e3d5b5;border-radius:6px;padding:.6em .8em;white-space:pre-wrap}
+.presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:.8em}
+.chip{font:14px/1.2 inherit;font-family:inherit;padding:5px 11px;border:1px solid #c9b48a;border-radius:16px;background:#fffaf0;color:var(--ink2);cursor:pointer}
+.chip:hover{border-color:var(--seal);color:var(--seal)}
+.ctrls{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:.8em;font-size:15px}
+.swipe{position:relative;border:1px solid #c9b48a;border-radius:6px;overflow:hidden;background:#c9d3c8;touch-action:none;user-select:none;cursor:ew-resize;line-height:0}
+.swipe svg{width:100%;height:auto;display:block}
+.swipe .ctop{position:absolute;inset:0}
+.swipe .handle{position:absolute;top:0;bottom:0;width:3px;margin-left:-1.5px;background:#a8322a}
+.swipe .handle span{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#a8322a;color:#fff;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;font-size:18px;line-height:1}
+.swipe .tag{position:absolute;top:10px;background:rgba(43,33,24,.85);color:#f6e9cf;font:600 15px/1 Georgia,serif;padding:6px 10px;border-radius:4px}
+.swipe .tag.l{left:10px}.swipe .tag.r{right:10px}
+.lead2{font-size:18px;color:var(--ink2)}
+.search{position:relative;max-width:560px}
+.search input{width:100%;font:inherit;font-size:18px;padding:10px 14px;border:1px solid #c9b48a;border-radius:6px;background:#fffdf7}
+.tres{position:absolute;left:0;right:0;z-index:4;background:#fffdf7;border:1px solid #d8c6a0;border-top:0;border-radius:0 0 6px 6px;box-shadow:0 6px 16px rgba(60,40,20,.12)}
+.tres:empty{display:none}
+.tres button{display:block;width:100%;text-align:left;font:inherit;padding:7px 14px;border:0;background:none;cursor:pointer}
+.tres button:hover{background:#f3e8cf}
+.tres small{color:var(--muted)}
+.tbar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:1em 0;border:1px solid #c9b48a}
+.tbar span{min-width:2px;border-right:1px solid rgba(255,255,255,.6)}
+h2 small,h3 small{color:var(--muted);font-weight:400}

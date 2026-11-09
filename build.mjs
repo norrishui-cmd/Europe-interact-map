@@ -8,6 +8,7 @@ import { geoProjection, geoPath, geoContains, geoArea, geoDistance, geoBounds, g
 const ROOT = process.cwd();
 const OUT = path.join(ROOT, 'dist');
 const SITE = 'https://chronicamaps.com';
+const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
 const TODAY = new Date().toISOString().slice(0, 10);
 const R_KM = 6371;
 
@@ -206,9 +207,9 @@ function mapSVG(s, r = 'europe') {
 }
 
 // ---------- page template ----------
-const NAV = [['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Daily puzzle', '/daily'], ['Compare', '/compare'], ['Town history', '/town'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
-function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage }) {
+function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool }) {
   body = body.replace(/<!--EMBED:([^>]*)-->/, (_, h) => embedBox(h, url, h1.replace(/&amp;/g, '&').replace(/<[^>]+>/g, ''))).replace(/<!--EMBED:[^>]*-->/g, '');
   if (!ogImage) { const m = body.match(/src="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
   if (!ogImage) ogImage = '/og/world-1500.jpg';
@@ -240,7 +241,7 @@ ${lds}
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((c, i) => (i < crumbs.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a>` : `<span>${esc(c[0])}</span>`)).join(' › ')}</nav>
 <h1>${h1}</h1>
 ${body}
-</main>
+</main>${tool ? `\n<script>window.APP_V="${VER}"</script><script src="/vendor/d3.min.js"></script><script src="/tools.js?v=${VER}"></script>` : ''}
 <footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth. Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>.</p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
 </body>
 </html>`;
@@ -474,6 +475,85 @@ add('/en/quiz', page({ url: '/en/quiz', title: 'History Map Quiz: Find Historic 
   h1: 'History Map Quiz', crumbs: [['Home', '/'], ['Quiz', '/en/quiz']],
   body: `<p class="lead">Ten questions, each naming a historic city or battle with a short clue. Click the map where you think it lies; the closer you are, the more points you score, up to 1,000 in total.</p>${openBtn('quiz', 'Start the quiz')}<p>The questions draw on ${CITIES.length} cities and ${SITES.filter(s => s.y < 1900).length} battles and sites across 2,500 years.</p>` }));
 
+// ---------- interactive tools ----------
+let TOOLS_META = '';
+const TOWNS = JSON.parse(fs.readFileSync(path.join(ROOT, 'towns.json'), 'utf8'));
+const PRESETS = [
+  ['Fall of the Western Roman Empire', 'europe', 400, 500, 'Between 400 and 500 the Western Roman Empire breaks up into Germanic kingdoms, while the Eastern Roman Empire survives.'],
+  ['Rise of the caliphate', 'world', 600, 700, 'Within a century of Muhammad, the caliphate stretches from Spain to Central Asia.'],
+  ['Mongol conquests', 'asia', 1200, 1300, 'Genghis Khan and his successors build the largest contiguous land empire in history.'],
+  ['Age of Discovery', 'world', 1492, 1600, 'European empires spread across the Americas and to the coasts of Africa and Asia.'],
+  ['Napoleonic Europe', 'europe', 1783, 1815, 'From the eve of the French Revolution to the Congress of Vienna.'],
+  ['Scramble for Africa', 'africa', 1880, 1914, 'European powers divide almost the whole of Africa among themselves.'],
+  ['World War I', 'europe', 1914, 1920, 'Four empires collapse and new states appear across central and eastern Europe.'],
+  ['Decolonisation', 'world', 1945, 1994, 'Colonial empires dissolve into dozens of independent states.'],
+  ['End of the Cold War', 'europe', 1960, 1994, 'The Soviet Union and Yugoslavia break apart and Germany reunites.'],
+];
+// static town pages: larger towns not already covered by a city page, with a real sequence of rulers
+const TOWN_PAGES = [];
+for (const t of TOWNS.t) {
+  if (TOWN_PAGES.length >= 600) break;
+  const ll = [t[4], t[5]];
+  if (CITIES.some(c => geoDistance(c.c, ll) * R_KM < 25)) continue;
+  const key = t[0] + '|' + t[2]; if (TOWN_PAGES.some(x => x.t[0] + '|' + x.t[2] === key)) continue;
+  const h = t[7], rows = [];
+  for (let i = 0; i < h.length; i += 2) rows.push({ n: h[i] >= 0 ? TOWNS.names[h[i]] : null, from: TOWNS.snaps[h[i + 1]], to: h[i + 2] !== undefined ? TOWNS.snaps[h[i + 3]] - 1 : 2026 });
+  const ruled = rows.filter(r => r.n && !isTribal(r.n)), uniq = [...new Set(ruled.map(r => polName(r.n)))];
+  if (uniq.length < 4) continue;
+  TOWN_PAGES.push({ t, ll, rows, ruled, uniq, slug: t[8] });
+}
+{
+  const names = {};
+  for (const s of SNAPS) for (const f of feats(s)) { const n = f.properties.n; if (!n || !n.trim() || names[n]) continue; const u = stateUrl(n); names[n] = [polName(n), colorOf(n), isTribal(n) ? 1 : 0, u ? u.replace('/en/state/', '') : '']; }
+  for (const n of TOWNS.names) if (!names[n]) { const u = stateUrl(n); names[n] = [polName(n), colorOf(n), isTribal(n) ? 1 : 0, u ? u.replace('/en/state/', '') : '']; }
+  const eras = { europe: ERAS.map(e => [e.from, e.to, e.name]) };
+  for (const e of RERAS) (eras[e.region] ||= []).push([e.from, e.to, e.name]);
+  eras.world = eras.europe;
+  TOOLS_META = (JSON.stringify({ snaps: SNAPS, names, eras, presets: PRESETS, towns: Object.fromEntries(TOWN_PAGES.map(x => [x.slug, 1])) }));
+}
+const toolPage = (url, title, desc, h1, tool, intro, after) => add(url, page({ url, title, desc, h1, crumbs: [['Home', '/'], [h1, url]], tool: true,
+  body: `<p class="lead">${esc(intro)}</p><div data-tool="${tool}"><div class="tool"><p class="muted">Loading…</p></div></div><noscript><p>This tool needs JavaScript.</p></noscript>${after}`,
+  ld: [{ '@context': 'https://schema.org', '@type': 'WebApplication', name: h1, url: SITE + url, applicationCategory: 'EducationalApplication', operatingSystem: 'Any', offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, description: desc }] }));
+const faq = qa => `<h2>Questions</h2>${qa.map(([q, a]) => `<h3>${esc(q)}</h3><p>${a}</p>`).join('')}`;
+const faqLd = qa => ({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qa.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a.replace(/<[^>]+>/g, '') } })) });
+{
+  const qa = [['How does the daily history map puzzle work?', 'Every day there is one unlabelled border map. Pick the year you think it shows; you have five tries. After each wrong guess you get a hint: the largest state, the era, more labels, and finally a narrow range of years. 🟩 means exact, 🟨 means within two maps.'],
+    ['When does a new puzzle appear?', 'A new puzzle starts every day at 00:00 UTC. Your streak and stats are kept in your browser.'],
+    ['Can I play past puzzles?', 'Yes. Add the puzzle number to the address, for example <a href="/daily#1">/daily#1</a>.']];
+  toolPage('/daily', 'Daily History Map Puzzle: Guess the Year | Chronica Maps', 'A free daily geography and history game: look at an unlabelled historical border map and guess the year in five tries. Share your result.', 'Daily Map Puzzle: Guess the Year', 'daily',
+    'One unlabelled historical map a day. Guess which year it shows in five tries, then share your score.', faq(qa));
+  pages.at(-1).html = pages.at(-1).html.replace('</head>', `<script type="application/ld+json">${JSON.stringify(faqLd(qa))}</script>
+</head>`);
+}
+toolPage('/compare', 'Compare Historical Maps: Two Years Side by Side | Chronica Maps', 'Compare the borders of any two years from 500 BC to today with a swipe slider: see which states appeared, disappeared, grew and shrank, in Europe, Asia, Africa, the Americas or the world.', 'Compare Two Historical Maps', 'compare',
+  'Pick a region and two years, then drag the slider to see how the borders changed. The lists below show which states appeared, disappeared, grew or shrank.',
+  `<h2>Popular comparisons</h2><ul class="links">${PRESETS.map(p => `<li><a href="/compare#${p[1]}-${p[2]}-${p[3]}">${esc(p[0])}: ${fy(p[2])} vs ${fy(p[3])}</a> — ${esc(p[4])}</li>`).join('')}</ul>`);
+toolPage('/town', 'What Country Was My Town In? Town History Through 2,500 Years | Chronica Maps', `Search ${TOWNS.t.length.toLocaleString('en-US')} towns and cities to see every state that ruled them on the historical border maps from 500 BC to today.`, 'What Country Was My Town In?', 'town',
+  `Type the name of a town or city to see which empires, kingdoms and states it belonged to on each historical border map, from ${fy(SNAPS[0])} to today.`,
+  `<h2>Town histories</h2><p>Browse <a href="/en/towns">${TOWN_PAGES.length} town history pages</a>, or the <a href="/en/cities">historic cities</a> with full timelines.</p>`);
+// town pages
+for (const x of TOWN_PAGES) {
+  const { t, ll, rows, ruled, uniq } = x, rg = regionOf(ll), name = t[0], where = [t[3] !== t[0] ? t[3] : '', t[2]].filter(Boolean).join(', ');
+  const longest = ruled.slice().sort((a, b) => (b.to - b.from) - (a.to - a.from))[0];
+  const ms = SNAPS.filter(s => s >= longest.from && s <= longest.to), s = ms[Math.floor(ms.length / 2)] ?? snapFor(longest.from);
+  const nc = nearCities(ll, 4, 500), ns = nearSites(ll, 200).slice(0, 8), nl = lmNear(ll, 200).slice(0, 6);
+  const lead = `${name}${where ? ` (${where})` : ''} lies within ${uniq.length} different states on Chronica Maps' ${SNAPS.length} historical border maps. The longest stretch is under ${polName(longest.n)}, from ${fy(longest.from)} to ${longest.to >= 2026 ? 'today' : fy(longest.to)}. ${ruled[0] ? `The earliest state recorded here is ${polName(ruled[0].n)} (${fy(ruled[0].from)}).` : ''}`;
+  const body = `<p class="lead">${esc(lead)}</p>
+<div class="tbar">${rows.map(r => `<span title="${esc((r.n ? polName(r.n) : 'No state recorded') + ' · ' + fy(r.from))}" style="flex:${Math.max(1, r.to - r.from)};background:${r.n ? colorOf(r.n) : '#e8dfcc'}"></span>`).join('')}</div>
+<h2>Who ruled ${esc(name)}?</h2>
+${table(['Period (by border map)', 'Ruled by'], rows.map(r => [`<a href="${rg === 'europe' ? '/en/year/' : '/en/world/'}${yearSlug(r.from)}">${fy(r.from)}</a> – ${r.to >= 2026 ? 'today' : fy(r.to)}`, stLink(r.n)]))}
+${mapBlock(s, `Map showing ${name} in ${fy(s)}`, pin(ll, name, rg), rg)}
+<p><a class="btn" href="/town#${x.slug}">Search another town</a></p>
+${nc.length ? `<h2>Historic cities nearby</h2><ul class="links">${nc.map(o => `<li><a href="/en/city/${o.c.id}">${esc(o.c.name)}</a> · about ${Math.round(o.d / 10) * 10} km</li>`).join('')}</ul>` : ''}
+${ns.length ? `<h2>Battles and events within 200 km</h2><ul class="links">${ns.map(o => `<li><a href="/en/battle/${o.id}">${esc(o.title)}</a> · ${fy(o.y)}</li>`).join('')}</ul>` : ''}
+${nl.length ? `<h2>Landmarks nearby</h2><ul class="links">${nl.map(o => `<li><a href="/en/landmark/${o.id}">${esc(o.name)}</a></li>`).join('')}</ul>` : ''}
+<p class="muted">Based on approximate historical borders; towns close to a frontier may be assigned to a neighbouring state.</p>`;
+  const tn = `${name}${t[2] ? `, ${t[2]}` : ''}`;
+  add(`/en/town/${x.slug}`, page({ url: `/en/town/${x.slug}`, title: `What Country Was ${tn} In? Rulers from ${fyShort(SNAPS[0])} to Today | Chronica Maps`,
+    desc: cut(`${name} was ruled by ${uniq.slice(0, 4).join(', ')}${uniq.length > 4 ? ' and others' : ''}. See every state that held ${name} on historical border maps from ${fy(SNAPS[0])} to today.`),
+    h1: `What Country Was ${esc(name)} In?`, crumbs: [['Home', '/'], ['Towns', '/en/towns'], [name, `/en/town/${x.slug}`]], body,
+    ld: [{ '@context': 'https://schema.org', '@type': 'Place', name, address: where || undefined, geo: { '@type': 'GeoCoordinates', latitude: t[5], longitude: t[4] }, url: `${SITE}/en/town/${x.slug}` }] }));
+}
 const hub = (url, title, h1, lead, inner, crumb) => add(url, page({ url, title: `${title} | Chronica Maps`, desc: cut(lead), h1, crumbs: [['Home', '/'], [crumb, url]], body: `<p class="lead">${esc(lead)}</p>${inner}` }));
 hub('/en/years', 'Maps of Europe by Year (500 BC – Today)', 'Maps of Europe by Year', `${SNAPS.length} border maps of Europe and the Mediterranean, from ${fy(SNAPS[0])} to ${fy(SNAPS.at(-1))}. Each shows state borders, rulers and the events of its period.`,
   `<ul class="grid">${SNAPS.map(s => `<li><a href="/en/year/${yearSlug(s)}"><img src="/maps/${yearSlug(s)}.svg" alt="Map of Europe in ${fy(s)}" loading="lazy" width="300" height="200"><span>Europe in ${fy(s)}</span></a></li>`).join('')}</ul>`, 'Years');
@@ -485,6 +565,11 @@ hub('/en/cities', 'Historic Cities of the World: Former Names & Timelines', 'His
   byRegion([...CITIES].sort((a, b) => a.name.localeCompare(b.name)), c => c.c).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : REGIONS[r].name}</h2>` + table(['City', 'Earliest name on record', 'From'], list.map(c => [`<a href="/en/city/${c.id}">${esc(c.name)}</a>`, esc(c.names[0].name), fy(c.names[0].from)]))).join(''), 'Cities');
 hub('/en/landmarks', 'Historic Landmarks of the World: Then and Now', 'Historic Landmarks: Then and Now', `${LMS.length} historic landmarks in ${COUNTRIES.length} countries, each shown as it was and as it looks today, with lost buildings set beside what stands on their site now.`,
   COUNTRIES.map(c => `<h2><a href="/en/landmarks/${ctySlug(c)}">${esc(c)}</a></h2><ul class="lmgrid">${LMS.filter(m => m.country === c).sort((a, b) => a.y - b.y).map(lmCard).join('')}</ul>`).join(''), 'Landmarks');
+{
+  const byC = {}; for (const x of TOWN_PAGES) (byC[x.t[2] || 'Other'] ||= []).push(x);
+  hub('/en/towns', 'Town Histories: What Country Was Each Town In?', 'Town Histories', `${TOWN_PAGES.length} towns and cities with the full sequence of states that ruled them from ${fy(SNAPS[0])} to today. Search any of ${TOWNS.t.length.toLocaleString('en-US')} towns with the town history tool.`,
+    `<p><a class="btn" href="/town">Search any town</a></p>` + Object.keys(byC).sort().map(c => `<h2>${esc(c)}</h2><ul class="links cols">${byC[c].sort((a, b) => a.t[0].localeCompare(b.t[0])).map(x => `<li><a href="/en/town/${x.slug}">${esc(x.t[0])}</a></li>`).join('')}</ul>`).join(''), 'Towns');
+}
 hub('/en/battles', 'Historic Battles and Sites on a Map: Europe, Asia, Africa', 'Battles and Historic Sites', `${SITES.length} battles and historic sites from ${fy(Math.min(...SITES.map(s => s.y)))} to ${fy(Math.max(...SITES.map(s => s.y)))}, each placed on the border map of its time.`,
   byRegion([...SITES].sort((a, b) => a.y - b.y), s => s.c).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : REGIONS[r].name}</h2>` + table(['Year', 'Battle or site'], list.map(s => [fy(s.y), `<a href="/en/battle/${s.id}">${esc(s.title)}</a>`]))).join(''), 'Battles & sites');
 hub('/en/states', 'States and Empires in History: Maps Over Time', 'States and Empires', `${STATE_LIST.length} states and empires, from Rome and the Tang to the Mughals and the Inca, each with its territory over time.`,
@@ -504,7 +589,6 @@ for (const f of fs.readdirSync(ROOT)) if (!SKIP.has(f) && !f.startsWith('.') && 
 const write = (rel, data) => { const p = path.join(OUT, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
 for (const p of pages) write(p.url + '.html', p.html);
 // cache-busting: stamp script URLs in the app shell with this build's version
-const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
 write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/__V__/g, VER));
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
 const SVGS = new Map();
@@ -555,5 +639,6 @@ write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64
 const urls = ['/', ...pages.map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${urls.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
+write('tools/meta.json', TOOLS_META);
 write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
 console.log(`Built ${pages.length} pages + ${SNAPS.length} maps → dist/`);
