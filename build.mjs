@@ -245,7 +245,7 @@ ${lds}
 ${body}
 ${featAside(url)}
 </main>${tool ? `\n<script>window.APP_V="${VER}"</script><script src="/vendor/d3.min.js"></script><script src="/tools.js?v=${VER}"></script>` : ''}
-<footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth. Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>.</p><p><a href="/about">About</a> · <a href="/guide">How to use the map</a> · <a href="/en/topics">Featured topics</a> · <a href="/en/anniversaries/${new Date().getUTCFullYear()}">Anniversaries</a></p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
+<footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth.</p><p><a href="/about">About</a> · <a href="/guide">How to use the map</a> · <a href="/en/topics">Featured topics</a> · <a href="/en/anniversaries/${new Date().getUTCFullYear()}">Anniversaries</a></p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
 </body>
 </html>`;
 }
@@ -637,7 +637,7 @@ add('/about', page({ url: '/about', title: 'About Chronica Maps: An Interactive 
 <p>You may link to any page and embed the interactive map on blogs, course sites and school pages with the embed code shown under each map; please keep the credit line. Animations made with the <a href="/animate">animation tool</a> are free to share with the chronicamaps.com credit visible.</p>
 <p>Suggested citation: <i>Chronica Maps: Interactive Historical Atlas</i>, ${SITE}, accessed [date].</p>
 <h2>Credits</h2>
-<p>Inspired by <a href="https://github.com/DeanChensj/jiangshan-map">Jiangshan Atlas</a>. Maps are drawn with <a href="https://d3js.org/">D3</a>.</p>
+<p>Maps are drawn with <a href="https://d3js.org/">D3</a>.</p>
 <p><a class="btn" href="/">Open the interactive map</a> <a class="btn" href="/guide">How to use it</a></p>`,
   ld: [{ '@context': 'https://schema.org', '@type': 'AboutPage', name: 'About Chronica Maps', url: SITE + '/about', about: ORG }, { '@context': 'https://schema.org', ...ORG }] }));
 {

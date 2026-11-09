@@ -7,7 +7,6 @@ Deployed on Vercel: `node build.mjs` writes `dist/`, which holds the app, about 
 ## Data sources
 - Historical polity outlines: [aourednik/historical-basemaps](https://github.com/aourednik/historical-basemaps) (GPL-3.0), simplified.
 - Land, rivers and lakes: [Natural Earth](https://www.naturalearthdata.com/) (public domain).
-- Inspired by [江山时序 Jiangshan Atlas](https://github.com/DeanChensj/jiangshan-map).
 
 Historical borders are schematic approximations, not surveyed boundaries.
 
