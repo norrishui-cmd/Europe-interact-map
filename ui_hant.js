@@ -1,4 +1,5 @@
-window.UI["zh-Hant"]={"people":"相關人物",
+window.UI["zh-Hant"]={"explore":{"h":["玩一玩","瀏覽","新內容"],"a":{"/daily":"每日一猜","/compare":"兩年對比","/town":"城鎮歸屬","/size":"真實大小","/animate":"疆域動畫","/en/world":"世界地圖","/en/years":"歐洲歷年","/en/cities":"城市","/en/landmarks":"名勝","/en/battles":"戰役","/en/states":"政權","/en/journeys":"人物行跡","/en/routes":"商路","/en/eras":"時代","/en/topics":"專題","/en/anniversaries/2026":"週年紀念","/guide":"使用指南","/about":"關於"}},
+"people":"相關人物",
 "tagPerson":"人物",
 "places":"相關地點",
 "birthplace":"出生地",
