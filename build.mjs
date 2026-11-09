@@ -15,7 +15,7 @@ const R_KM = 6371;
 // ---------- load content (same files the app uses) ----------
 const ctx = { window: {} };
 vm.createContext(ctx);
-for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_world2.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'content_world2_en.js', 'landmarks.js', 'routes.js', 'featured.js']) {
+for (const f of ['i18n.js', 'polities.js', 'polities_world.js', 'content.js', 'content_more.js', 'content_world.js', 'content_world2.js', 'content_en.js', 'content_more_en.js', 'content_world_en.js', 'content_world2_en.js', 'content_world3.js', 'people.js', 'landmarks.js', 'routes.js', 'featured.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window, E = W.CONTENT_EN;
@@ -79,6 +79,11 @@ const CITIES = W.CITIES.map(c => {
     names: c.names.map((n, i) => ({ from: n[0], name: (e.names && e.names[i]) || strip(n[1]) || e.n, note: e.notes[i] || '' })),
     ev: c.ev.map((x, i) => ({ y: x[0], t: e.ev[i] || '' })).sort((a, b) => a.y - b.y) };
 });
+const CITY = Object.fromEntries(CITIES.map(c => [c.id, c]));
+const PEOPLE = (W.PEOPLE || []).map(p => ({ ...p, name: p.n.en, role: p.r.en, bio: p.d.en, cities: p.at.map(id => CITY[id]).filter(Boolean) }))
+  .map(p => ({ ...p, ll: p.c || (p.cities[0] && p.cities[0].c), place: p.pl ? p.pl.en : (p.cities[0] && p.cities[0].name) }));
+const lifeY = p => `${p.ca ? 'c. ' : ''}${fy(p.y[0])} – ${fy(p.y[1])}`;
+const peopleIn = id => PEOPLE.filter(p => p.at.includes(id)).sort((a, b) => a.y[0] - b.y[0]);
 const THE = new Set(['Catalaunian Plains', 'Teutoburg Forest', 'Kalka River', 'White Mountain', 'Somme', 'Milvian Bridge']);
 const SITE_TITLE = { peipus: 'Battle on the Ice (Lake Peipus)', normandy: 'Normandy Landings', gallipoli: 'Gallipoli Campaign', ankara1402: 'Battle of Ankara', tannenberg1914: 'Battle of Tannenberg', tours: 'Battle of Tours–Poitiers', kosovo: 'Battle of Kosovo' };
 const SITES = W.SITES.map(s => ({ id: s.id, en: s.en, c: s.c, y: s.y, k: s.k, d: E.sites[s.id],
@@ -207,7 +212,7 @@ function mapSVG(s, r = 'europe') {
 }
 
 // ---------- page template ----------
-const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
@@ -236,6 +241,7 @@ ${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/assets/page.css">
 ${lds}
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9505220977121599"\n     crossorigin="anonymous"></script>
 </head>
 <body>
 <header class="top"><a class="brand" href="/"><span class="seal">C</span>Chronica Maps</a><nav>${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join('')}<a class="cta" href="/">Interactive map →</a></nav></header>
@@ -347,6 +353,7 @@ ${table(['Year', 'Event'], c.ev.map(e => [`<a href="/en/year/${yearSlug(snapFor(
 ${table(['Period', 'State'], rows.map(r => [`${fyShort(r.from)}–${r.to >= 2026 ? 'today' : fyShort(r.to)}`, stLink(r.n)]))}
 ${ns.length ? `<h2>Battles and sites near ${esc(c.name)}</h2><ul class="links">${ns.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
 ${lmNear(c.c, 60).length ? `<h2>Landmarks in and around ${esc(c.name)}</h2><ul class="lmgrid">${lmNear(c.c, 60).map(lmCard).join('')}</ul>` : ''}
+${peopleIn(c.id).length ? `<h2>Famous people of ${esc(c.name)}</h2>${table(['Lived', 'Person', ''], peopleIn(c.id).map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]))}` : ''}
 ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a href="/en/city/${x.c.id}">${esc(x.c.name)}</a> · about ${Math.round(x.d)} km</li>`).join('')}</ul>` : ''}`;
   add(`/en/city/${c.id}`, page({ url: `/en/city/${c.id}`, title: `${c.name} History: Former Names${old.length ? ` (${old.slice(0, 2).join(', ')})` : ''} & Timeline Map | Chronica Maps`,
     desc: cut(`${c.bio} Former names, timeline of events and every state that ruled ${c.name}, on a historical map.`),
@@ -616,6 +623,38 @@ hub('/en/journeys', 'Historical Journeys on a Map: Routes and Timelines', 'Histo
   `<ul class="links">${JOURNEYS.map(j => `<li><a href="/en/journey/${j.id}">${esc(j.title)}</a> · ${esc(j.span)} · ${esc(j.who)}</li>`).join('')}</ul>`, 'Journeys');
 hub('/en/eras', 'Eras of History by Region: Maps and Timelines', 'Eras of History', `${ALL_ERAS.length} periods of history in Europe, Asia, Africa, the Americas and Oceania, each with its maps, events and battles.`,
   ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<h2>${RNAME(r)}</h2>` + table(['Era', 'Period'], ALL_ERAS.filter(e => e.region === r).map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`]))).join(''), 'Eras');
+
+// ---------- people ----------
+for (const p of PEOPLE) {
+  const url = `/en/person/${p.id}`, clampY = y => Math.max(-500, Math.min(2025, y)), mid = clampY(Math.round((p.y[0] + p.y[1]) / 2));
+  const rg = p.ll ? regionOf(p.ll) : 'world', s = snapFor(mid);
+  const places = [...(p.c ? [{ name: p.pl.en, ll: p.c, url: null }] : []), ...p.cities.map(c => ({ name: c.name, ll: c.c, url: `/en/city/${c.id}` }))];
+  const sb = snapFor(clampY(p.y[0])), sd = snapFor(clampY(p.y[1]));
+  const rule = p.y[1] >= -500 ? places.map(x => { const a = polityAt(x.ll, sb), b = polityAt(x.ll, sd); return [x.url ? `<a href="${x.url}">${esc(x.name)}</a>` : esc(x.name), stLink(a), a === b ? '<span class="muted">same</span>' : stLink(b)]; }) : [];
+  const evs = p.cities.flatMap(c => c.ev.filter(e => e.y >= p.y[0] && e.y <= p.y[1]).map(e => [fy(e.y), esc(e.t), `<a href="/en/city/${c.id}">${esc(c.name)}</a>`]));
+  const sites = SITES.filter(x => x.y >= p.y[0] && x.y <= p.y[1] && p.ll && geoDistance(x.c, p.ll) * R_KM < 1500).sort((a, b) => a.y - b.y).slice(0, 8);
+  const ov = q => Math.min(p.y[1], q.y[1]) - Math.max(p.y[0], q.y[0]);
+  const cont = PEOPLE.filter(q => q.id !== p.id && ov(q) >= 15).sort((a, b) => ov(b) - ov(a) || a.y[0] - b.y[0]).slice(0, 10);
+  const her = /\b(she|her|Queen|Empress)\b/.test(p.bio + p.role) ? 'her' : 'his';
+  const body = `<p class="lead">${esc(p.bio)}</p>
+${table(['', ''], [['Lived', lifeY(p)], ['Known as', esc(p.role)], ...(p.place ? [['Birthplace or main place', esc(p.place)]] : []), ...(p.cities.length ? [['Places on the map', p.cities.map(c => `<a href="/en/city/${c.id}">${esc(c.name)}</a>`).join(', ')]] : [])])}
+${p.ll ? mapBlock(s, `Map of the world around ${p.name} in ${fy(s)}`, pin(p.ll, p.place || p.name, rg), rg) : ''}
+${openBtn(`${hashYear(clampY(p.y[0] + 30 > p.y[1] ? p.y[0] : p.y[0] + 30))}-h-${p.id}${rg === 'europe' || rg === 'world' ? '' : `-r-${rg}`}`, `See the world of ${p.name} in the interactive map`)}
+${p.y[0] < -500 ? `<p class="muted">${esc(p.name)} lived before the earliest border map (${fy(SNAPS[0])}); the map above shows the oldest snapshot available.</p>` : ''}
+${rule.length ? `<h2>Who ruled these places in ${her} lifetime</h2>${table([`Place`, `At birth (map of ${fy(sb)})`, `At death (map of ${fy(sd)})`], rule)}<p class="muted">From the border maps nearest to each date; borders are approximate.</p>` : ''}
+${evs.length ? `<h2>Events in ${her} lifetime</h2>${table(['Year', 'Event', 'Where'], evs.sort((a, b) => parseInt(a[0]) - parseInt(b[0])))}` : ''}
+${sites.length ? `<h2>Battles and sites of the time</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
+${cont.length ? `<h2>Contemporaries</h2>${table(['Lived', 'Person', ''], cont.map(q => [lifeY(q), `<a href="/en/person/${q.id}">${esc(q.name)}</a>`, esc(q.role)]))}` : ''}`;
+  const ld = { '@context': 'https://schema.org', '@type': 'Person', name: p.name, alternateName: p.n.zh, description: p.bio, jobTitle: p.role, url: SITE + url };
+  if (p.y[0] > 0 && !p.ca) ld.birthDate = String(p.y[0]).padStart(4, '0');
+  if (p.y[1] > 0 && !p.ca) ld.deathDate = String(p.y[1]).padStart(4, '0');
+  if (p.place) ld.birthPlace = { '@type': 'Place', name: p.place };
+  add(url, page({ url, title: `${p.name} (${p.ca ? 'c. ' : ''}${fyShort(p.y[0])}–${fyShort(p.y[1])}): Life, Places & Map | Chronica Maps`,
+    desc: cut(`${p.bio} Places, contemporaries and who ruled ${her} world, on a historical map.`),
+    h1: esc(p.name), crumbs: [['Home', '/'], ['People', '/en/people'], [p.name, url]], body, ld: [ld] }));
+}
+hub('/en/people', 'Famous People in History: Lives on the Map', 'Famous People in History', `${PEOPLE.length} rulers, thinkers, artists, travellers and reformers from Hammurabi to Mandela, each placed on the map of their time with the cities they are linked to.`,
+  byRegion([...PEOPLE].filter(p => p.ll).sort((a, b) => a.y[0] - b.y[0]), p => p.ll).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : RNAME(r)}</h2>` + table(['Lived', 'Person', ''], list.map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]))).join(''), 'People');
 
 // ---------- about, guide, featured topics, anniversaries ----------
 const md = t => esc(t).replace(/\[([^\]]+)\]\((\/[^)\s]*)\)/g, '<a href="$2">$1</a>');
