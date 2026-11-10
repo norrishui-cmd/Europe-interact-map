@@ -11,7 +11,7 @@ const SITE = 'https://chronicamaps.com';
 const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
 const TODAY = new Date().toISOString().slice(0, 10);
 const R_KM = 6371;
-const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: 'https://chronicamaps.com', logo: 'https://chronicamaps.com/favicon.svg' };
+const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: 'https://chronicamaps.com', logo: 'https://chronicamaps.com/icon-512.png' };
 const fdate = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 // ---------- load content (same files the app uses) ----------
@@ -255,7 +255,10 @@ ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" hr
 <meta property="og:url" content="${SITE}${url}">
 ${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage) ? '\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">' : ''}\n<meta name="twitter:image" content="${ogAbs}">` : ''}
 <meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/assets/page.css">
 ${lds}
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9505220977121599"\n     crossorigin="anonymous"></script>
@@ -891,6 +894,16 @@ write('assets/page.css', fs.readFileSync(path.join(ROOT, 'page.css'), 'utf8'));
   write('vendor/fonts.css', css);
 }
 write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#a8322a"/><text x="32" y="45" text-anchor="middle" font-family="Georgia,serif" font-size="40" font-weight="700" fill="#f6e9cf">C</text></svg>`);
+{ // raster favicons: Google search needs a crawlable icon in a multiple of 48 px
+  const { Resvg } = await import('@resvg/resvg-js'); const FD2 = path.join(ROOT, 'node_modules/dejavu-fonts-ttf/ttf/');
+  const fsvg = s => `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 64 64"><rect width="64" height="64" rx="${s <= 32 ? 8 : 12}" fill="#a8322a"/><text x="32" y="46" text-anchor="middle" font-family="DejaVu Serif" font-size="42" font-weight="700" fill="#f6e9cf">C</text></svg>`;
+  const png = s => new Resvg(fsvg(s), { font: { fontFiles: [FD2 + 'DejaVuSerif-Bold.ttf'], loadSystemFonts: false, defaultFontFamily: 'DejaVu Serif' } }).render().asPng();
+  for (const [s, f] of [[48, 'favicon-48x48.png'], [96, 'favicon-96x96.png'], [180, 'apple-touch-icon.png'], [192, 'icon-192.png'], [512, 'icon-512.png']]) fs.writeFileSync(path.join(OUT, f), png(s));
+  const ims = [16, 32, 48].map(s => ({ s, b: png(s) })), hd = Buffer.alloc(6 + 16 * ims.length); hd.writeUInt16LE(0, 0); hd.writeUInt16LE(1, 2); hd.writeUInt16LE(ims.length, 4);
+  let off = hd.length; ims.forEach((im, i) => { const o = 6 + 16 * i; hd.writeUInt8(im.s, o); hd.writeUInt8(im.s, o + 1); hd.writeUInt16LE(1, o + 4); hd.writeUInt16LE(32, o + 6); hd.writeUInt32LE(im.b.length, o + 8); hd.writeUInt32LE(off, o + 12); off += im.b.length; });
+  fs.writeFileSync(path.join(OUT, 'favicon.ico'), Buffer.concat([hd, ...ims.map(i => i.b)]));
+  write('site.webmanifest', JSON.stringify({ name: 'Chronica Maps', short_name: 'Chronica Maps', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }], theme_color: '#a8322a', background_color: '#f3e9d2', display: 'standalone', start_url: '/' }));
+}
 const urls = ['/', ...pages.filter(p => !p.noSitemap).map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
 for (const p of pages) { const l = [...new Set([...p.html.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"/g)].map(m => m[1]))]; if (l.length) IMGS[p.url] = [...(IMGS[p.url] || []), ...l.map(u => ({ t960: SITE + u }))]; }
