@@ -66,7 +66,7 @@ $("#bPrev").title=U.bPrev;$("#bPlay").title=U.bPlay;$("#bNext").title=U.bNext;
 // 语言切换
 const sel=$("#langSel");sel.title=U.lang;
 window.LANGS.forEach(([k,n])=>{const o=document.createElement("option");o.value=k;o.textContent=n;if(k===L)o.selected=true;sel.appendChild(o)});
-sel.addEventListener("change",()=>{const v=sel.value;try{localStorage.setItem("euLang",v)}catch(e){}
+sel.addEventListener("change",()=>{const v=sel.value;try{localStorage.setItem("cmLang",v)}catch(e){}
   const code=window.LANG_CODES[v];let h=location.hash.slice(1).replace(/(^|-)l-[a-z]+/,"");h=(h?h+"-":"")+"l-"+code;
   location.hash=h;location.reload()});
 })();

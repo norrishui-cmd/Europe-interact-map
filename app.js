@@ -552,7 +552,7 @@ document.addEventListener("keydown",e=>{
 
 // ---------- 链接锚点：#y1453 / #yBC52 / #y1415-c-paris / #p-napoleon / #quiz ----------
 let lastCard="";
-function writeHash(){if(quiz)return;const yh=year<0?`yBC${-year}`:`y${year}`;let h=yh;if(journey)h=`p-${journey.id}`;else if(d3.select("#panel").classed("show")&&lastCard)h+=`-${lastCard}`;if(region!=="europe")h+=`-r-${region}`;h+=`-l-${window.LANG_CODE}`;try{history_.replaceState(null,"","#"+h)}catch(e){}}
+function writeHash(){if(quiz)return;const yh=year<0?`yBC${-year}`:`y${year}`;let h=yh;if(journey)h=`p-${journey.id}`;else if(d3.select("#panel").classed("show")&&lastCard)h+=`-${lastCard}`;if(region!=="europe")h+=`-r-${region}`;if(window.LANG_CODE!=="en")h+=`-l-${window.LANG_CODE}`;try{history_.replaceState(null,"","#"+h)}catch(e){}}
 const history_=window.history;
 function readHash(){
   const h=decodeURIComponent(location.hash.slice(1));

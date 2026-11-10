@@ -253,7 +253,7 @@ body.latin #eras div{font-size:12px}
 (function(){
  var codes={zhs:"zh-Hans",zht:"zh-Hant",en:"en",de:"de",fr:"fr",es:"es"},inv={};for(var k in codes)inv[codes[k]]=k;
  var m=location.hash.match(/(?:^#|-)l-(zhs|zht|en|de|fr|es)(?:-|$)/),L=m?codes[m[1]]:null;
- if(!L){try{L=localStorage.getItem("euLang")}catch(e){}}
+ if(!L){try{L=localStorage.getItem("cmLang")}catch(e){}}
  if(!L||!inv[L]){L="en"}
  window.APP_V="__V__";window.LANG=L;if(/^zh/.test(L)){var g=document.createElement("link");g.rel="stylesheet";g.href="https://fonts.googleapis.com/css2?family=Noto+Serif+"+(L==="zh-Hant"?"TC":"SC")+":wght@400;600;900&display=swap";document.head.appendChild(g)}window.LANG_CODE=inv[L];window.LANG_CODES=inv;
  var f=L==="zh-Hant"?["ui_hant.js","polities.hant.js","polities_world.hant.js","content.hant.js","content_more.hant.js","content_world.hant.js","content_world2.hant.js","content_world3.hant.js","people.hant.js"]:L==="zh-Hans"?["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_world3.js","people.js"]:["polities.js","polities_world.js","content.js","content_more.js","content_world.js","content_world2.js","content_en.js","content_more_en.js","content_world_en.js","content_world2_en.js","content_world3.js","people.js"];f.push("landmarks.js","routes.js");if(L==="de"||L==="fr"||L==="es")f.push("tr_"+L+".js");
