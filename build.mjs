@@ -229,7 +229,7 @@ function mapSVG(s, r = 'europe') {
 }
 
 // ---------- page template ----------
-const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Countries', '/en/countries'], ['Largest empires', '/en/largest-empires'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Countries', '/en/countries'], ['Largest empires', '/en/largest-empires'], ['Compare maps', '/en/compare'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
@@ -781,6 +781,71 @@ ${qaBlock('Questions', qa)}
     ld: [qaLd(qa), { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Largest empires in history', itemListElement: best.slice(0, 20).map((x, k) => ({ '@type': 'ListItem', position: k + 1, name: polName(x.n) })) }] }));
 }
 
+// ---------- static map comparisons ----------
+const CMP = [
+  ...PRESETS.map(([t, r, a, b, d]) => ({ r, a, b, t, d })),
+  { r: 'europe', a: -200, b: 100, t: 'Rise of Rome' }, { r: 'europe', a: 700, b: 800, t: 'The Carolingian Empire' }, { r: 'europe', a: 900, b: 1000, t: 'Europe around the year 1000' },
+  { r: 'europe', a: 1100, b: 1300, t: 'The High Middle Ages' }, { r: 'europe', a: 1400, b: 1500, t: 'Fall of Constantinople and the Ottoman advance' }, { r: 'europe', a: 1600, b: 1700, t: 'The Thirty Years’ War and its aftermath' },
+  { r: 'europe', a: 1815, b: 1880, t: 'Unification of Italy and Germany' }, { r: 'europe', a: 1880, b: 1914, t: 'Europe before the First World War' }, { r: 'europe', a: 1920, b: 1938, t: 'Between the wars' },
+  { r: 'europe', a: 1938, b: 1945, t: 'World War II' }, { r: 'europe', a: 1994, b: 2010, t: 'Europe after the Cold War' },
+  { r: 'asia', a: -300, b: -100, t: 'Maurya and Han' }, { r: 'asia', a: 600, b: 700, t: 'The rise of the Tang' }, { r: 'asia', a: 1300, b: 1400, t: 'From the Yuan to the Ming' },
+  { r: 'asia', a: 1600, b: 1700, t: 'The Qing conquest' }, { r: 'asia', a: 1800, b: 1900, t: 'Asia in the age of imperialism' }, { r: 'asia', a: 1938, b: 1960, t: 'War and independence in Asia' },
+  { r: 'africa', a: 600, b: 800, t: 'The Arab conquest of North Africa' }, { r: 'africa', a: 1914, b: 1960, t: 'African independence' },
+  { r: 'americas', a: 1492, b: 1600, t: 'The Spanish conquest' }, { r: 'americas', a: 1783, b: 1880, t: 'Independence in the Americas' }, { r: 'americas', a: 1880, b: 1920, t: 'The Americas from 1880 to 1920' },
+  { r: 'world', a: -500, b: -300, t: 'Alexander the Great' }, { r: 'world', a: 1800, b: 1914, t: 'The age of empires' }, { r: 'world', a: 1914, b: 1945, t: 'The world wars' },
+  { r: 'oceania', a: 1783, b: 1900, t: 'The colonisation of Oceania' }].filter(x => SNAPS.includes(x.a) && SNAPS.includes(x.b));
+const cmpUrl = x => `/en/compare/${x.r}-${yearSlug(x.a)}-to-${yearSlug(x.b)}`;
+const inReg = r => (n, s) => r === 'world' || REG[s].get(n) === r;
+const llReg = (ll, r) => r === 'world' || regionOf(ll) === r;
+for (const x of CMP) {
+  const url = cmpUrl(x), R = RNAME(x.r), { appeared, vanished, delta } = changes(x.a, x.b, inReg(x.r));
+  const nm = l => l.slice(0, 3).map(y => polName(y[0])).join(', ');
+  const auto = `Between ${fy(x.a)} and ${fy(x.b)}, ${appeared.length} states appear on the map of ${R} and ${vanished.length} disappear.${vanished.length ? ` Among those that vanish: ${nm(vanished)}.` : ''}${appeared.length ? ` New on the map: ${nm(appeared)}.` : ''}${delta.length ? ` ${polName(delta[0][0])} ${delta[0][1] > 0 ? 'gains' : 'loses'} the most territory.` : ''}`;
+  const evs = EVENTS.filter(e => e.y > x.a && e.y <= x.b && e.ll && llReg(e.ll, x.r)).sort((a, b) => a.y - b.y);
+  const bat = SITES.filter(s2 => s2.y > x.a && s2.y <= x.b && llReg(s2.c, x.r)).sort((a, b) => a.y - b.y);
+  const ppl = spread(alive(x.a, x.b).filter(p => p.ll && llReg(p.ll, x.r)).sort((a, b) => a.y[0] - b.y[0]), 10);
+  const qa = [[`How did the map of ${R} change between ${fy(x.a)} and ${fy(x.b)}?`, auto]];
+  if (vanished.length) qa.push([`Which states disappeared from the map of ${R} between ${fy(x.a)} and ${fy(x.b)}?`, vanished.slice(0, 10).map(y => polName(y[0])).join(', ') + '.']);
+  if (appeared.length) qa.push([`Which new states appeared between ${fy(x.a)} and ${fy(x.b)}?`, appeared.slice(0, 10).map(y => polName(y[0])).join(', ') + '.']);
+  const fig = s2 => `<figure class="map"><img src="${imgUrl(s2, x.r)}" data-svg="${mapUrl(s2, x.r)}" width="1200" height="800" alt="Map of ${R} in ${fy(s2)}" loading="lazy" decoding="async"><figcaption><a href="${x.r === 'europe' ? '/en/year/' : '/en/world/'}${yearSlug(s2)}">${R} in ${fy(s2)}</a></figcaption></figure>`;
+  const body = `<p class="lead">${esc(x.d ? x.d + ' ' : '')}${esc(auto)}</p>
+<div class="cmp2">${fig(x.a)}${fig(x.b)}</div>
+<p><a class="btn" href="/compare#${x.r}-${x.a}-${x.b}">Compare with the swipe slider</a> ${openBtn(`${hashYear(x.b)}${x.r === 'europe' ? '' : `-r-${x.r}`}`, `Open ${fy(x.b)} in the interactive map`)}</p>
+${vanished.length ? `<h2>States that disappeared</h2>${table(['State', `Area in ${fy(x.a)}`], vanished.slice(0, 12).map(y => [stLink(y[0]), fmtKm2(y[1])]))}` : ''}
+${appeared.length ? `<h2>New states on the map</h2>${table(['State', `Area in ${fy(x.b)}`], appeared.slice(0, 12).map(y => [stLink(y[0]), fmtKm2(y[1])]))}` : ''}
+${delta.length ? `<h2>States that grew or shrank</h2>${table(['State', 'Change in area'], delta.slice(0, 12).map(y => [stLink(y[0]), signKm(y[1])]))}` : ''}
+${evs.length ? `<h2>What happened in between</h2>${table(['Year', 'Event', 'Where'], evs.slice(0, 16).map(e => [fy(e.y), esc(e.t), e.place ? placeLink(e.place) : '']))}` : ''}
+${bat.length ? `<h2>Battles of the period</h2><ul class="links cols">${bat.slice(0, 16).map(b => `<li><a href="/en/battle/${b.id}">${esc(b.title)}</a> · ${fy(b.y)}</li>`).join('')}</ul>` : ''}
+${pBlock(`People of the period`, ppl, 10)}
+${qaBlock('Questions', qa)}
+<p class="muted">Borders are drawn from the nearest available maps and are approximate.</p>`;
+  x.title = `${R} ${fyShort(x.a)} vs ${fyShort(x.b)} Map: How the Borders Changed`;
+  add(url, page({ url, title: x.title.length <= 62 ? x.title : `${R} ${fyShort(x.a)} vs ${fyShort(x.b)}: Borders Compared`, desc: cut(`${x.t}: ${auto}`), h1: `${esc(x.t)}: ${R} in ${fy(x.a)} and ${fy(x.b)}`,
+    crumbs: [['Home', '/'], ['Map comparisons', '/en/compare'], [`${fy(x.a)} vs ${fy(x.b)}`, url]], body, ogImage: `/og/${x.r}-${yearSlug(x.b)}.jpg`, ld: [qaLd(qa)] }));
+}
+hub('/en/compare', 'Historical Map Comparisons: Borders Before and After', 'Map Comparisons', `${CMP.length} side-by-side comparisons of historical border maps, from the rise of Rome to the end of the Cold War, with the states that appeared, vanished, grew or shrank.`,
+  ['europe', 'asia', 'africa', 'americas', 'oceania', 'world'].map(r => [r, CMP.filter(x => x.r === r).sort((a, b) => a.a - b.a)]).filter(z => z[1].length).map(([r, l]) => `<h2>${RNAME(r)}</h2><ul class="links">${l.map(x => `<li><a href="${cmpUrl(x)}">${esc(x.t)}</a> · ${fy(x.a)} vs ${fy(x.b)}</li>`).join('')}</ul>`).join('') + '<p><a href="/compare">Compare any two years with the swipe tool</a></p>', 'Map comparisons');
+// link comparisons from the year pages they use
+for (const x of CMP) for (const s2 of [x.a, x.b]) { const pg = pages.find(p => p.url === `${x.r === 'europe' ? '/en/year/' : '/en/world/'}${yearSlug(s2)}`); if (pg && !pg.html.includes(cmpUrl(x))) pg.html = pg.html.replace('<p class="updated muted">', `<p>Compare: <a href="${cmpUrl(x)}">${esc(x.t)} (${fy(x.a)} vs ${fy(x.b)})</a></p>\n<p class="updated muted">`); }
+
+// ---------- former city names A–Z ----------
+{
+  const rows = [];
+  for (const c of CITIES) c.names.forEach((n, i) => { if (n.name && n.name !== c.name) rows.push({ old: n.name, from: n.from, to: c.names[i + 1] ? c.names[i + 1].from : null, note: n.note, c }); });
+  const key = s2 => s2.normalize('NFD').replace(/[^A-Za-z]/g, '').toUpperCase();
+  rows.sort((a, b) => key(a.old).localeCompare(key(b.old)));
+  const letters = [...new Set(rows.map(r => key(r.old)[0]).filter(Boolean))];
+  const famous = CITIES.filter(c => c.r === 1 && c.names.some(n => n.name !== c.name)).slice(0, 40);
+  const qa = famous.map(c => [`What was ${c.name} called before?`, `${c.names.filter(n => n.name !== c.name).map(n => `${n.name} (from ${fy(n.from)})`).join(', ')}.`]);
+  add('/en/old-names', page({ url: '/en/old-names', title: 'Old Names of Cities: A–Z of Former City Names', desc: cut(`${rows.length} former names of ${new Set(rows.map(r => r.c.id)).size} cities, from Byzantion and Eboracum to Edo and Zaitun, with the years each name was used and the city it belongs to today.`),
+    h1: 'Old Names of Cities, A to Z', crumbs: [['Home', '/'], ['Cities', '/en/cities'], ['Old names', '/en/old-names']],
+    body: `<p class="lead">Many cities have had several names: Greek, Latin, Arabic, Turkic or colonial names that changed with each new ruler. This list gives ${rows.length} former names of ${new Set(rows.map(r => r.c.id)).size} cities, with the years each name appears on the maps and the city it is today.</p>
+<p class="az">${letters.map(l => `<a href="#${l}">${l}</a>`).join(' ')}</p>
+${letters.map(l => `<h2 id="${l}">${l}</h2>${table(['Former name', 'Used', 'City today', ''], rows.filter(r => key(r.old)[0] === l).map(r => [esc(r.old), `${fy(r.from)}${r.to ? ` – ${fy(r.to)}` : ''}`, `<a href="/en/city/${r.c.id}">${esc(r.c.name)}</a>`, esc(r.note || '')]))}`).join('')}
+${qaBlock('Questions', qa)}`,
+    ld: [qaLd(qa)] }));
+}
+
 // ---------- people ----------
 for (const p of PEOPLE) {
   const url = `/en/person/${p.id}`, clampY = y => Math.max(-500, Math.min(2025, y)), mid = clampY(Math.round((p.y[0] + p.y[1]) / 2));
@@ -976,7 +1041,7 @@ write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64
 const urls = ['/', ...pages.filter(p => !p.noSitemap).map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
 for (const p of pages) { const l = [...new Set([...p.html.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"/g)].map(m => m[1]))]; if (l.length) IMGS[p.url] = [...(IMGS[p.url] || []), ...l.map(u => ({ t960: SITE + u }))]; }
-const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(country|largest|city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
+const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(country|largest|compare|old-names|city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
 const smGroups = {}; for (const u of urls) (smGroups[SECT(u)] ||= []).push(u);
 for (const [g, list] of Object.entries(smGroups)) write(`sitemap-${g}.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${list.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Object.keys(smGroups).map(g => `  <sitemap><loc>${SITE}/sitemap-${g}.xml</loc><lastmod>${TODAY}</lastmod></sitemap>`).join('\n')}\n</sitemapindex>\n`);
