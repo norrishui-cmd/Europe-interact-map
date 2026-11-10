@@ -87,6 +87,14 @@ const PEOPLE = (W.PEOPLE || []).map(p => ({ ...p, name: p.n.en, role: p.r.en, bi
 const lifeY = p => `${p.ca ? 'c. ' : ''}${fy(p.y[0])} – ${fy(p.y[1])}`;
 const peopleIn = id => PEOPLE.filter(p => p.at.includes(id)).sort((a, b) => a.y[0] - b.y[0]);
 const further = q => `<h2>Further reading</h2><ul class="links"><li><a href="https://www.britannica.com/search?query=${encodeURIComponent(q)}" rel="nofollow">${esc(q)} in Encyclopaedia Britannica</a></li><li><a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(q)}&amp;go=Go" rel="nofollow">${esc(q)} on Wikipedia</a></li></ul>`;
+const CN2 = { 'Zaire': 'Democratic Republic of the Congo', 'Tanzania, United Republic of': 'Tanzania', 'Korea, Republic of': 'South Korea', "Korea, Democratic People's Republic of": 'North Korea', 'Iran, Islamic Republic of': 'Iran', 'Syrian Arab Republic': 'Syria', 'Viet Nam': 'Vietnam', "Lao People's Democratic Republic": 'Laos', 'Libyan Arab Jamahiriya': 'Libya', 'Macedonia': 'North Macedonia', 'Moldova, Republic of': 'Moldova', 'Ivory Coast': "Côte d'Ivoire", 'Swaziland': 'Eswatini', 'Burma': 'Myanmar' };
+const modernOf = ll => { const n = polityAt(ll, SNAPS.at(-1)); return n && !isTribal(n) ? (CN2[n] || polName(n)) : null; };
+const YQ = [1000, 1500, 1800, 1900];
+const art = n => /^[A-Z][a-z]+s$/.test(n) && !/(lands|ines|Wales|Paris|Athens)$/.test(n) ? `the lands of the ${n}` : (/^the /i.test(n) || !/\b(Empire|Kingdom|Khanate|Sultanate|Caliphate|Republic|Union|Confederation|Duchy|Horde|Emirate|Dynasty|States|Commonwealth|Federation|Protectorate|Viceroyalty|Mandate|Order|League|Principality|Archduchy|Dominion|Khaganate|Shogunate|Raj)\b/.test(n) ? n : 'the ' + n);
+const yearQs = (name, ll, from = -9999) => YQ.filter(y => y >= from && SNAPS[0] <= y).map(y => { const sn = snapFor(y), n = polityAt(ll, sn);
+  return n && !isTribal(n) ? [`What country was ${name} in ${y}?`, `On the border map for ${fy(sn)}, ${name} lay within ${art(polName(n))}.`] : null; }).filter(Boolean);
+const qaBlock = (title, qa) => qa.length ? `<h2>${title}</h2>${qa.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}` : '';
+const qaLd = qa => ({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qa.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) });
 const alive = (a, b) => PEOPLE.filter(p => p.y[0] <= b && p.y[1] >= a);
 const pTable = list => table(['Lived', 'Person', ''], list.map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]));
 const pBlock = (h, list, n = 12) => list.length ? `<h2>${h}</h2>${pTable(list.slice(0, n))}${list.length > n ? `<p><a href="/en/people">All ${PEOPLE.length} people</a></p>` : ''}` : '';
@@ -221,7 +229,7 @@ function mapSVG(s, r = 'europe') {
 }
 
 // ---------- page template ----------
-const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Countries', '/en/countries'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
+const NAV = [['Daily puzzle', '/daily'], ['Tools', '/tools'], ['Trade routes', '/en/routes'], ['Europe by year', '/en/years'], ['World maps', '/en/world'], ['Countries', '/en/countries'], ['Largest empires', '/en/largest-empires'], ['Cities', '/en/cities'], ['People', '/en/people'], ['Landmarks', '/en/landmarks'], ['Battles & sites', '/en/battles'], ['States', '/en/states'], ['Journeys', '/en/journeys'], ['Eras', '/en/eras']];
 const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
@@ -365,6 +373,8 @@ for (const c of CITIES) {
     if (old.length) qa.push([`What was ${c.name} called in the past?`, `${c.name} has been known as ${old.map(n => `${n.name} (from ${fy(n.from)}${n.note ? `, ${n.note}` : ''})`).join('; ')}. Its present name dates from ${fy(c.names.at(-1).from)}.`]);
     if (st.length) qa.push([`Which states have ruled ${c.name}?`, `On the historical border maps from ${fy(SNAPS[0])} to today, ${c.name} lies within ${st.length} different state${st.length > 1 ? 's' : ''}: ${st.slice(0, 10).join(', ')}${st.length > 10 ? ' and others' : ''}.`]);
     if (c.ev.length) qa.push([`What are the key dates in the history of ${c.name}?`, c.ev.slice(0, 5).map(e => `${fy(e.y)}: ${e.t}`).join('. ') + '.']);
+    qa.push(...yearQs(c.name, c.c, c.names[0].from));
+    { const m = modernOf(c.c); if (m && m !== c.name) qa.push([`What country is ${c.name} in today?`, `${c.name} is in ${m}.`]); }
     if (pp.length) qa.push([`Which famous people are connected with ${c.name}?`, pp.slice(0, 6).map(p => `${p.name} (${p.role.toLowerCase()}, ${lifeY(p)})`).join('; ') + '.']);
     EXTRA[`/en/city/${c.id}`] = further(`${c.name} history`) + `<h2>Questions about ${esc(c.name)}</h2>${qa.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('')}`;
     EXTRA_LD[`/en/city/${c.id}`] = [{ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qa.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }]; }
@@ -394,7 +404,12 @@ ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a hre
 
 // ---------- battle / site pages ----------
 for (const x of SITES) {
-  EXTRA[`/en/battle/${x.id}`] = further(x.title) + pBlock(`Who was alive at the time`, alive(x.y, x.y).filter(p => p.ll && geoDistance(p.ll, x.c) * R_KM < 2500).sort((a, b) => geoDistance(a.ll, x.c) - geoDistance(b.ll, x.c)), 8);
+  { const nc = CITIES.slice().sort((a, b) => geoDistance(a.c, x.c) - geoDistance(b.c, x.c))[0], km = Math.round(geoDistance(nc.c, x.c) * R_KM), m = modernOf(x.c), n = polityAt(x.c, snapFor(x.y)), qa = [];
+    qa.push([`Where did the ${x.title.replace(/^the /i, '')} take place?`, `${km < 15 ? `At ${nc.name}` : `About ${Math.round(km / 5) * 5} km from ${nc.name}`}${m ? `, in present-day ${m}` : ''}. Coordinates: ${x.c[1].toFixed(2)}°${x.c[1] >= 0 ? 'N' : 'S'}, ${Math.abs(x.c[0]).toFixed(2)}°${x.c[0] >= 0 ? 'E' : 'W'}.`]);
+    qa.push([`When did the ${x.title.replace(/^the /i, '')} happen?`, `In ${fy(x.y)}.`]);
+    if (n && !isTribal(n)) qa.push([`Which state controlled the area at the time?`, `On the border map for ${fy(snapFor(x.y))}, the site lay within ${art(polName(n))}.`]);
+    x._qa = qa; EXTRA_LD[`/en/battle/${x.id}`] = [qaLd(qa)]; }
+  EXTRA[`/en/battle/${x.id}`] = qaBlock('Questions', x._qa) + further(x.title) + pBlock(`Who was alive at the time`, alive(x.y, x.y).filter(p => p.ll && geoDistance(p.ll, x.c) * R_KM < 2500).sort((a, b) => geoDistance(a.ll, x.c) - geoDistance(b.ll, x.c)), 8);
   const s = snapFor(Math.max(-500, x.y)), held = polityAt(x.c, s), nc = nearCities(x.c, 1)[0];
   const ctxEv = EVENTS.filter(e => Math.abs(e.y - x.y) <= 5 && e.place !== x.id && (!e.ll || regionOf(e.ll) === regionOf(x.c))).sort((a, b) => a.y - b.y), rul = rulersAt(x.y, regionOf(x.c)), ns = nearSites(x.c, 300, x.id);
   const body = `<p class="lead">${esc(x.d)}</p>
@@ -417,7 +432,13 @@ const P_STATES = new Map(PEOPLE.map(p => { const set = new Set(), lls = [...(p.c
   for (const s of SNAPS) if (s >= p.y[0] - 50 && s <= p.y[1]) for (const ll of lls) { const n = polityAt(ll, s); if (n) set.add(n); }
   return [p.id, set]; }));
 for (const st of STATE_LIST) {
-  EXTRA[`/en/state/${st.slug}`] = pBlock(`Famous people who lived under the ${esc(st.name.replace(/^the /i, ''))}`, PEOPLE.filter(p => P_STATES.get(p.id).has(st.n)).sort((a, b) => a.y[0] - b.y[0]));
+  { const ss = [...new Set(st.maps.map(m => m.s))].sort((a, b) => a - b), nm = st.name.replace(/^the /i, ''), The = art(nm) !== nm ? 'the ' : '', Nm = The ? 'The ' + nm : nm;
+    const mods = [...new Set(feats(SNAPS.at(-1)).filter(f => f.properties.n && !isTribal(f.properties.n) && inB(st.peak.f._b, geoCentroid(f)) && geoContains(st.peak.f, geoCentroid(f))).map(f => CN2[f.properties.n] || polName(f.properties.n)))].filter(m => m !== st.name);
+    const qa = [[`When does ${The}${nm} appear on the map?`, ss.length === 1 ? `${Nm} appears on one border map, the map for ${fy(ss[0])}.` : `${Nm} appears on ${ss.length} of the ${SNAPS.length} border maps, from ${fy(ss[0])}${ss.at(-1) === SNAPS.at(-1) ? ' to today' : ` to ${fy(ss.at(-1))}`}.`],
+      [`When was ${The}${nm} at its largest?`, `On the map for ${fy(st.peak.s)}, with about ${fmtKm2(st.peak.area)}.`]];
+    if (mods.length) qa.push([`Which present-day countries were part of ${The}${nm}?`, `At its largest, ${The}${nm} covered all or part of ${mods.slice(0, 15).join(', ')}${mods.length > 15 ? ' and others' : ''}.`]);
+    st._qa = qa; EXTRA_LD[`/en/state/${st.slug}`] = [qaLd(qa)]; }
+  EXTRA[`/en/state/${st.slug}`] = qaBlock('Questions', st._qa) + pBlock(`Famous people who lived under the ${esc(st.name.replace(/^the /i, ''))}`, PEOPLE.filter(p => P_STATES.get(p.id).has(st.n)).sort((a, b) => a.y[0] - b.y[0]));
   const maps = st.maps.sort((a, b) => a.s - b.s), first = maps[0].s, last = maps.at(-1).s, peak = st.peak, L = lineage(st.n);
   const inside = CITIES.filter(c => polityAt(c.c, peak.s) === st.n);
   const realm = L && REALM_OF[L[0]] ? W.RULERS.find(R => R.k === REALM_OF[L[0]]) : null;
@@ -589,7 +610,8 @@ toolPage('/animate', 'Make a Historical Border Animation (GIF or Video) | Chroni
   `<h2>Notes</h2><p>The animation is made in your browser; nothing is uploaded. Video is saved as MP4 where the browser supports it, otherwise as WebM. You are free to share the result; please keep the chronicamaps.com credit visible.</p>`);
 // town pages
 for (const x of TOWN_PAGES) {
-  EXTRA[`/en/town/${x.slug}`] = pBlock(`Famous people from the region`, PEOPLE.filter(p => p.ll && geoDistance(p.ll, x.ll) * R_KM < 250).sort((a, b) => a.y[0] - b.y[0]), 8);
+  { const nm = x.t[0], qa = yearQs(nm, x.ll); if (qa.length) { EXTRA_LD[`/en/town/${x.slug}`] = [qaLd(qa)]; } x._qa = qa; }
+  EXTRA[`/en/town/${x.slug}`] = qaBlock(`Questions about ${esc(x.t[0])}`, x._qa) + pBlock(`Famous people from the region`, PEOPLE.filter(p => p.ll && geoDistance(p.ll, x.ll) * R_KM < 250).sort((a, b) => a.y[0] - b.y[0]), 8);
   const { t, ll, rows, ruled, uniq } = x, rg = regionOf(ll), name = t[0], where = [t[3] !== t[0] ? t[3] : '', t[2]].filter(Boolean).join(', ');
   const longest = ruled.slice().sort((a, b) => (b.to - b.from) - (a.to - a.from))[0];
   const ms = SNAPS.filter(s => s >= longest.from && s <= longest.to), s = ms[Math.floor(ms.length / 2)] ?? snapFor(longest.from);
@@ -665,13 +687,13 @@ hub('/en/eras', 'Eras of History by Region: Maps and Timelines', 'Eras of Histor
   ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => `<h2>${RNAME(r)}</h2>` + table(['Era', 'Period'], ALL_ERAS.filter(e => e.region === r).map(e => [`<a href="/en/era/${e.slug}">${esc(e.name)}</a>`, `${fy(e.from)}–${e.to >= 2026 ? 'today' : fy(e.to)}`]))).join(''), 'Eras');
 
 // ---------- modern countries: who ruled the land of today's states ----------
-const CNAME = { 'Zaire': 'Democratic Republic of the Congo', 'Tanzania, United Republic of': 'Tanzania', 'Russia': 'Russia', 'United States': 'United States', 'Myanmar': 'Myanmar', 'Korea, Republic of': 'South Korea', "Korea, Democratic People's Republic of": 'North Korea', 'Iran, Islamic Republic of': 'Iran', 'Syrian Arab Republic': 'Syria', 'Viet Nam': 'Vietnam', 'Lao People\'s Democratic Republic': 'Laos', 'Libyan Arab Jamahiriya': 'Libya', 'Czech Republic': 'Czech Republic', 'Macedonia': 'North Macedonia', 'Moldova, Republic of': 'Moldova', 'Ivory Coast': "Côte d'Ivoire", 'Swaziland': 'Eswatini', 'Burma': 'Myanmar' };
+const CNAME_OLD = { 'Zaire': 'Democratic Republic of the Congo', 'Tanzania, United Republic of': 'Tanzania', 'Russia': 'Russia', 'United States': 'United States', 'Myanmar': 'Myanmar', 'Korea, Republic of': 'South Korea', "Korea, Democratic People's Republic of": 'North Korea', 'Iran, Islamic Republic of': 'Iran', 'Syrian Arab Republic': 'Syria', 'Viet Nam': 'Vietnam', 'Lao People\'s Democratic Republic': 'Laos', 'Libyan Arab Jamahiriya': 'Libya', 'Czech Republic': 'Czech Republic', 'Macedonia': 'North Macedonia', 'Moldova, Republic of': 'Moldova', 'Ivory Coast': "Côte d'Ivoire", 'Swaziland': 'Eswatini', 'Burma': 'Myanmar' };
 const COUNTRY_PAGES = [];
 {
   const t0 = Date.now();
   for (const f of feats(2010)) {
     const raw = (f.properties.n || '').trim(); if (!raw || raw === 'Antarctica' || isTribal(raw)) continue;
-    const name = CNAME[raw] || polName(raw), b = f._b, pts = [];
+    const name = CN2[raw] || polName(raw), b = f._b, pts = [];
     const cities = CITIES.filter(c => inB(b, c.c) && geoContains(f, c.c));
     if (f.properties.a < 3 && !cities.length) continue;
     const w = b[1][0] - b[0][0] < 0 ? b[1][0] + 360 - b[0][0] : b[1][0] - b[0][0], h = b[1][1] - b[0][1];
@@ -718,6 +740,47 @@ ${further(`History of ${C.name}`)}`;
 hub('/en/countries', 'History of Every Country on the Map: Who Ruled Its Lands', 'Countries Through History', `${COUNTRY_PAGES.length} modern countries, each with the empires and states that held its land on every map from ${fy(SNAPS[0])} to today, plus its historic cities, people and battles.`,
   byRegion([...COUNTRY_PAGES].sort((a, b) => a.name.localeCompare(b.name)), c => c.ll).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : RNAME(r)}</h2><ul class="links cols">${list.map(c => `<li><a href="/en/country/${c.slug}">${esc(c.name)}</a></li>`).join('')}</ul>`).join(''), 'Countries');
 
+// ---------- largest states on each map ----------
+const LAND = 148.9e6, LAREA = {};
+for (const st of Object.values(stInfo)) for (const m of st.maps) { const a = m.area > 2 * Math.PI * R_KM * R_KM ? 4 * Math.PI * R_KM * R_KM - m.area : m.area; ((LAREA[m.s] ||= {})[st.n] = (LAREA[m.s][st.n] || 0) + a); }
+const ranked = sn => Object.entries(LAREA[sn] || {}).filter(([n]) => !/^(Antarctica|Greenland)$/.test(n)).sort((a, b) => b[1] - a[1]);
+const lgUrl = sn => `/en/largest/${yearSlug(sn)}`;
+for (const sn of SNAPS) {
+  const url = lgUrl(sn), L = ranked(sn), top = L.slice(0, 20), i = SNAPS.indexOf(sn), prev = SNAPS[i - 1], next = SNAPS[i + 1];
+  if (!top.length) continue;
+  const regTop = ['europe', 'asia', 'africa', 'americas', 'oceania'].map(r => [r, L.filter(([n]) => { const st = Object.values(stInfo).find(x => x.n === n); const mp = st && st.maps.find(m => m.s === sn); return mp && regionOf(geoCentroid(mp.f)) === r; }).slice(0, 5)]).filter(x => x[1].length);
+  const prevRank = prev ? Object.fromEntries(ranked(prev).map(([n], k) => [n, k + 1])) : {};
+  const lead = `On the world border map for ${fy(sn)}, the largest state was ${polName(top[0][0])}, with about ${fmtKm2(top[0][1])} — some ${Math.round(100 * top[0][1] / LAND)}% of the world's land. ${top[1] ? `It was followed by ${polName(top[1][0])}${top[2] ? ` and ${polName(top[2][0])}` : ''}.` : ''}`;
+  const qa = [[`What was the largest country in the world in ${fy(sn)}?`, `${polName(top[0][0])}, with about ${fmtKm2(top[0][1])}, on the border map for ${fy(sn)}.`],
+    [`What were the five largest states in ${fy(sn)}?`, top.slice(0, 5).map(([n, a], k) => `${k + 1}. ${polName(n)} (${fmtKm2(a)})`).join('; ') + '.'],
+    ...regTop.slice(0, 3).map(([r, l]) => [`What was the largest state in ${RNAME(r)} in ${fy(sn)}?`, `${polName(l[0][0])}, with about ${fmtKm2(l[0][1])}.`])];
+  const body = `<p class="lead">${esc(lead)}</p>
+${mapBlock(sn, `World map in ${fy(sn)}`, '', 'world')}
+<h2>The 20 largest states in ${fy(sn)}</h2>
+${table(['Rank', 'State', 'Area', 'Share of world land', prev ? `Rank in ${fy(prev)}` : ''], top.map(([n, a], k) => [k + 1, stLink(n), fmtKm2(a), `${(100 * a / LAND).toFixed(1)}%`, prev ? (prevRank[n] ? (prevRank[n] <= 20 ? prevRank[n] : '–') : '<span class="muted">new</span>') : '']))}
+<p class="muted">Areas are measured from the border polygons of the map and are approximate; claimed areas, tributaries and unorganised land are not included.</p>
+<h2>Largest states by region</h2>${regTop.map(([r, l]) => `<h3>${RNAME(r)}</h3>${table(['Rank', 'State', 'Area'], l.map(([n, a], k) => [k + 1, stLink(n), fmtKm2(a)]))}`).join('')}
+${qaBlock('Questions', qa)}
+<p>${prev ? `<a href="${lgUrl(prev)}">← Largest states in ${fy(prev)}</a>` : ''}${prev && next ? ' · ' : ''}${next ? `<a href="${lgUrl(next)}">Largest states in ${fy(next)} →</a>` : ''} · <a href="/en/largest-empires">Largest empires in history</a> · <a href="/en/world/${yearSlug(sn)}">The world in ${fy(sn)}</a></p>`;
+  add(url, page({ url, title: `Largest Countries and Empires in ${fy(sn)}: Top 20 by Area`, desc: cut(lead), h1: `The Largest States in the World in ${fy(sn)}`,
+    crumbs: [['Home', '/'], ['Largest empires', '/en/largest-empires'], [fy(sn), url]], body, ld: [qaLd(qa), { '@context': 'https://schema.org', '@type': 'ItemList', name: `Largest states in ${fy(sn)}`, itemListElement: top.map(([n], k) => ({ '@type': 'ListItem', position: k + 1, name: polName(n) })) }] }));
+}
+{
+  const best = Object.values(stInfo).map(st => { let b = null; for (const s2 of new Set(st.maps.map(m => m.s))) { const a = LAREA[s2] && LAREA[s2][st.n]; if (a && (!b || a > b.a)) b = { s: s2, a }; } return b && { n: st.n, ...b }; })
+    .filter(x => x && /^[A-Z]/.test(x.n) && !/^(Antarctica|Greenland|Russia|Russian Federation|Canada|United States|United States of America|China|Brazil|Kingdom of Brazil|Empire of Brazil|Australia|USSR|White Russia|Mongolia|Argentina|India|Kazakhstan)$/i.test(x.n) && x.s < 1950).sort((a, b) => b.a - a.a).slice(0, 50);
+  const qa = [['What was the largest empire in history?', `On these maps, the largest state before 1950 is ${polName(best[0].n)}, with about ${fmtKm2(best[0].a)} on the map for ${fy(best[0].s)}. Area figures in history books differ because they count claimed land and dependencies differently; overseas empires such as the British appear on these maps as separate colonies, so they do not show as one state.`],
+    ['What were the largest empires in history?', best.slice(0, 10).map((x, k) => `${k + 1}. ${polName(x.n)} (${fmtKm2(x.a)}, ${fy(x.s)})`).join('; ') + '.']];
+  add('/en/largest-empires', page({ url: '/en/largest-empires', title: 'Largest Empires in History, Ranked by Map Area', desc: cut(`The 50 largest empires and states before 1950, ranked by the area they cover at their peak on the historical border maps, with links to the map of each year.`),
+    h1: 'The Largest Empires in History', crumbs: [['Home', '/'], ['Largest empires', '/en/largest-empires']],
+    body: `<p class="lead">The 50 largest states before 1950, each measured at its peak on the historical border maps from ${fy(SNAPS[0])} onward. Modern states are left out so the list shows historical empires.</p>
+${table(['Rank', 'Empire or state', 'Peak area', 'Map year'], best.map((x, k) => [k + 1, stLink(x.n), fmtKm2(x.a), `<a href="${lgUrl(x.s)}">${fy(x.s)}</a>`]))}
+<p class="muted">Overseas colonial empires, such as the British and French, are drawn on these maps as separate colonies and therefore do not appear as single entries. Areas come from the border polygons and are approximate. Ranking by area at a single map date can differ from figures quoted elsewhere, which may use a different peak year or include claimed territory.</p>
+<h2>Largest states by year</h2><ul class="links cols">${SNAPS.filter(x => LAREA[x]).map(x => `<li><a href="${lgUrl(x)}">${fy(x)}</a></li>`).join('')}</ul>
+${qaBlock('Questions', qa)}
+<p><a href="/size">Compare the true size of empires</a></p>`,
+    ld: [qaLd(qa), { '@context': 'https://schema.org', '@type': 'ItemList', name: 'Largest empires in history', itemListElement: best.slice(0, 20).map((x, k) => ({ '@type': 'ListItem', position: k + 1, name: polName(x.n) })) }] }));
+}
+
 // ---------- people ----------
 for (const p of PEOPLE) {
   const url = `/en/person/${p.id}`, clampY = y => Math.max(-500, Math.min(2025, y)), mid = clampY(Math.round((p.y[0] + p.y[1]) / 2));
@@ -730,6 +793,11 @@ for (const p of PEOPLE) {
   const ov = q => Math.min(p.y[1], q.y[1]) - Math.max(p.y[0], q.y[0]);
   const cont = PEOPLE.filter(q => q.id !== p.id && ov(q) >= 15).sort((a, b) => ov(b) - ov(a) || a.y[0] - b.y[0]).slice(0, 10);
   const her = /\b(she|her|Queen|Empress)\b/.test(p.bio + p.role) ? 'her' : 'his';
+  const qa = [];
+  if (places.length) qa.push([`Where did ${p.name} live?`, `On the map, ${p.name} is linked with ${places.map(x => x.name).join(', ')}.`]);
+  if (p.y[0] >= -500 && p.y[0] - sb <= 40 && places.length) { const n0 = polityAt(places[0].ll, sb); if (n0 && !isTribal(n0)) qa.push([`What country was ${places[0].name} part of when ${p.name} was born?`, `Around ${fy(p.y[0])}, ${places[0].name} lay within ${art(polName(n0))} (border map for ${fy(sb)}).`]); }
+  if (!p.ca) { const age = p.y[1] - p.y[0] - (p.y[0] < 0 && p.y[1] > 0 ? 1 : 0); qa.push([`How old was ${p.name} at death?`, `${p.name} lived from ${fy(p.y[0])} to ${fy(p.y[1])} and died at about ${age}.`]); }
+  if (cont.length) qa.push([`Who lived at the same time as ${p.name}?`, `Contemporaries on the map include ${cont.slice(0, 6).map(q => `${q.name} (${lifeY(q)})`).join(', ')}.`]);
   const body = `<p class="lead">${esc(p.bio)}</p>
 ${table(['', ''], [['Lived', lifeY(p)], ['Known as', esc(p.role)], ...(p.place ? [['Birthplace or main place', esc(p.place)]] : []), ...(p.cities.length ? [['Places on the map', p.cities.map(c => `<a href="/en/city/${c.id}">${esc(c.name)}</a>`).join(', ')]] : [])])}
 ${p.ll ? mapBlock(s, `Map of the world around ${p.name} in ${fy(s)}`, pin(p.ll, p.place || p.name, rg), rg) : ''}
@@ -738,6 +806,7 @@ ${p.y[0] < -500 ? `<p class="muted">${esc(p.name)} lived before the earliest bor
 ${rule.length ? `<h2>Who ruled these places in ${her} lifetime</h2>${table([`Place`, `At birth (map of ${fy(sb)})`, `At death (map of ${fy(sd)})`], rule)}<p class="muted">From the border maps nearest to each date; borders are approximate.</p>` : ''}
 ${evs.length ? `<h2>Events in ${her} lifetime</h2>${table(['Year', 'Event', 'Where'], evs.sort((a, b) => parseInt(a[0]) - parseInt(b[0])))}` : ''}
 ${sites.length ? `<h2>Battles and sites of the time</h2><ul class="links">${sites.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
+${qaBlock('Questions', qa)}
 ${further(p.name)}
 ${cont.length ? `<h2>Contemporaries</h2>${table(['Lived', 'Person', ''], cont.map(q => [lifeY(q), `<a href="/en/person/${q.id}">${esc(q.name)}</a>`, esc(q.role)]))}` : ''}`;
   const ld = { '@context': 'https://schema.org', '@type': 'Person', name: p.name, alternateName: p.n.zh, description: p.bio, jobTitle: p.role, url: SITE + url };
@@ -746,7 +815,7 @@ ${cont.length ? `<h2>Contemporaries</h2>${table(['Lived', 'Person', ''], cont.ma
   if (p.place) ld.birthPlace = { '@type': 'Place', name: p.place };
   add(url, page({ url, title: `${p.name} (${p.ca ? 'c. ' : ''}${fyShort(p.y[0])}–${fyShort(p.y[1])}): Life, Places & Map | Chronica Maps`,
     desc: cut(`${p.bio} Places, contemporaries and who ruled ${her} world, on a historical map.`),
-    h1: esc(p.name), crumbs: [['Home', '/'], ['People', '/en/people'], [p.name, url]], body, ld: [ld] }));
+    h1: esc(p.name), crumbs: [['Home', '/'], ['People', '/en/people'], [p.name, url]], body, ld: [ld, ...(qa.length ? [qaLd(qa)] : [])] }));
 }
 hub('/en/people', 'Famous People in History: Lives on the Map', 'Famous People in History', `${PEOPLE.length} rulers, thinkers, artists, travellers and reformers from Hammurabi to Mandela, each placed on the map of their time with the cities they are linked to.`,
   byRegion([...PEOPLE].filter(p => p.ll).sort((a, b) => a.y[0] - b.y[0]), p => p.ll).map(([r, list]) => `<h2>${r === 'world' ? 'Elsewhere' : RNAME(r)}</h2>` + table(['Lived', 'Person', ''], list.map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]))).join(''), 'People');
@@ -907,7 +976,7 @@ write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64
 const urls = ['/', ...pages.filter(p => !p.noSitemap).map(p => p.url)];
 const IMGS = Object.fromEntries(LMS.map(m => [`/en/landmark/${m.id}`, m.imgs || []]));
 for (const p of pages) { const l = [...new Set([...p.html.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"/g)].map(m => m[1]))]; if (l.length) IMGS[p.url] = [...(IMGS[p.url] || []), ...l.map(u => ({ t960: SITE + u }))]; }
-const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(country|city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
+const SECT = u => u === '/' ? 'core' : (u.match(/^\/en\/(country|largest|city|person|town|state|battle|landmark|landmarks|year|world|era|journey|route|topics)\//) || [, 'core'])[1].replace(/^landmarks$/, 'landmark');
 const smGroups = {}; for (const u of urls) (smGroups[SECT(u)] ||= []).push(u);
 for (const [g, list] of Object.entries(smGroups)) write(`sitemap-${g}.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${list.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Object.keys(smGroups).map(g => `  <sitemap><loc>${SITE}/sitemap-${g}.xml</loc><lastmod>${TODAY}</lastmod></sitemap>`).join('\n')}\n</sitemapindex>\n`);
