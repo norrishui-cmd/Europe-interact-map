@@ -1028,6 +1028,13 @@ write('assets/page.css', fs.readFileSync(path.join(ROOT, 'page.css'), 'utf8'));
   write('vendor/fonts.css', css);
 }
 write('favicon.svg', `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#a8322a"/><text x="32" y="45" text-anchor="middle" font-family="Georgia,serif" font-size="40" font-weight="700" fill="#f6e9cf">C</text></svg>`);
+{ // base map for the app: land + lakes as TopoJSON (critical path), rivers loaded later
+  const { topology } = await import('topojson-server');
+  const r2 = x => JSON.parse(JSON.stringify(x, (k, v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v)));
+  write('geo/land.json', JSON.stringify(topology({ land: PHYS.land, lakes: PHYS.lakes }, 3e4)));
+  write('geo/rivers.json', JSON.stringify(r2(PHYS.rivers)));
+  fs.copyFileSync(path.join(ROOT, 'node_modules/topojson-client/dist/topojson-client.min.js'), path.join(OUT, 'vendor/topojson-client.min.js'));
+}
 { // raster favicons: Google search needs a crawlable icon in a multiple of 48 px
   const { Resvg } = await import('@resvg/resvg-js'); const FD2 = path.join(ROOT, 'node_modules/dejavu-fonts-ttf/ttf/');
   const fsvg = s => `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 64 64"><rect width="64" height="64" rx="${s <= 32 ? 8 : 12}" fill="#a8322a"/><text x="32" y="46" text-anchor="middle" font-family="DejaVu Serif" font-size="42" font-weight="700" fill="#f6e9cf">C</text></svg>`;

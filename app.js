@@ -77,7 +77,8 @@ svg.call(zoom).on("dblclick.zoom",null);
 const SNAP_DATA={}, SNAP_REQ={};
 function ensure(list){return Promise.all(list.filter(s=>s!==null&&s!==undefined).map(s=>{s=String(s);if(SNAP_DATA[s])return SNAP_DATA[s];return SNAP_REQ[s]||(SNAP_REQ[s]=d3.json(`atlas/${s}.json?v=${window.APP_V||""}`).then(d=>{SNAP_DATA[s]=d;return d}))}))}
 function ensureAll(){return ensure(SNAPS)}
-Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("physical.json?v="+(window.APP_V||""))]).then(([a,p])=>{
+Promise.all([d3.json("atlas/index.json?v="+(window.APP_V||"")),d3.json("geo/land.json?v="+(window.APP_V||""))]).then(([a,t])=>{
+  const p={land:topojson.feature(t,t.objects.land),lakes:topojson.feature(t,t.objects.lakes),rivers:{type:"FeatureCollection",features:[]}};
   IDXA=a; PHYS=p; SNAPS=a.snaps; ATLAS={data:SNAP_DATA};
   const h=decodeURIComponent(location.hash.slice(1));const m=h.match(/(?:^|-)r-([a-z]+)/);if(m&&REGIONS[m[1]])region=m[1];
   fit(); transform=regionT(region);svg.call(zoom.transform,transform); drawPhysical(); buildTimeline(); buildQuick(); buildRegionBar(); readHash();
@@ -110,6 +111,8 @@ function drawPhysical(){
   gTex.append("path").datum(PHYS.land).attr("class","coast").attr("d",path);
   gLake.selectAll("path").data(PHYS.lakes.features).join("path").attr("class","lake").attr("d",path);
   gRiv.selectAll("path").data(PHYS.rivers.features).join("path").attr("class","river").attr("d",path);
+  // 河流延后加载，不阻塞首屏
+  setTimeout(()=>d3.json("geo/rivers.json?v="+(window.APP_V||"")).then(r=>{PHYS.rivers=r;gRiv.selectAll("path").data(r.features).join("path").attr("class","river").attr("d",path)}).catch(()=>{}),300);
 }
 
 // ---------- 快照 ----------
