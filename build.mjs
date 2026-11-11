@@ -236,7 +236,8 @@ const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
 const EXTRA = {}, EXTRA_LD = {};
-function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogType = 'article', noindex }) {
+function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogType = 'article', noindex, facts }) {
+  if (facts && facts.length) { const box = `<section class="facts" aria-label="Quick facts"><h2>Quick facts</h2><ul>${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul></section>\n`; body = /^<p class="lead">/.test(body) ? body.replace(/^(<p class="lead">[\s\S]*?<\/p>\n?)/, m => m + box) : box + body; }
   if (title.length > 62 && title.endsWith(' | Chronica Maps')) title = title.slice(0, -16);
   if (EXTRA[url]) body += EXTRA[url];
   if (EXTRA_LD[url]) ld = [...ld, ...EXTRA_LD[url]];
@@ -244,7 +245,7 @@ function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogTy
   if (!ogImage) { const m = body.match(/data-svg="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
   const imgs = [...new Set([...body.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"[^>]*alt="([^"]*)"/g)].map(m => m[1] + '|' + m[2]))];
   if (imgs.length) ld = [...ld, ...imgs.map(x => { const [u, alt] = x.split('|'); return { '@context': 'https://schema.org', '@type': 'ImageObject', contentUrl: SITE + u, name: alt.replace(/&amp;/g, '&'), creditText: 'Chronica Maps', creator: ORG, copyrightNotice: 'Chronica Maps; border data historical-basemaps (GPL-3.0), Natural Earth', license: 'https://www.gnu.org/licenses/gpl-3.0.html', acquireLicensePage: SITE + '/about#using-and-citing-the-maps' }; })];
-  if (!noindex) ld = [...ld, { '@context': 'https://schema.org', '@type': 'WebPage', url: SITE + url, name: title, dateModified: TODAY, inLanguage: 'en', isPartOf: { '@type': 'WebSite', name: 'Chronica Maps', url: SITE }, publisher: ORG }];
+  if (!noindex) ld = [...ld, { '@context': 'https://schema.org', '@type': 'WebPage', url: SITE + url, name: title, ...(facts && facts.length ? { abstract: facts.join(' ') } : {}), dateModified: TODAY, inLanguage: 'en', author: ORG, isPartOf: { '@type': 'WebSite', name: 'Chronica Maps', url: SITE }, publisher: ORG }];
   if (!ogImage) ogImage = '/og/world-1500.jpg';
   const ogAbs = ogImage ? (/^https?:/.test(ogImage) ? ogImage : SITE + ogImage) : '';
   const bc = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c[0], item: SITE + c[1] })) };
@@ -256,7 +257,7 @@ function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogTy
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
-${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${SITE}${url}">`}
+${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${SITE}${url}">${tool ? '' : `\n<link rel="alternate" type="text/markdown" href="${url}.md">`}`}
 <link rel="alternate" type="application/rss+xml" title="Chronica Maps: Featured topics" href="/feed.xml">
 <meta property="og:type" content="${ogType}">
 <meta property="og:site_name" content="Chronica Maps">
@@ -279,7 +280,7 @@ ${lds}
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((c, i) => (i < crumbs.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a>` : `<span>${esc(c[0])}</span>`)).join(' › ')}</nav>
 <h1>${h1}</h1>
 ${body}
-${noindex || tool ? '' : `<p class="updated muted">Last updated ${fdate(TODAY)}. Sources: border data from <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a>, land and rivers from Natural Earth; texts written for Chronica Maps from standard reference works. <a href="/about#sources-and-method">How we make the maps</a>.</p>`}
+${noindex || tool ? '' : `<p class="cite muted"><strong>Cite this page:</strong> Chronica Maps, “${esc(h1.replace(/<small>.*?<\/small>/, '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').trim())}”, ${SITE}${url}, updated ${fdate(TODAY)}. <a href="${url}.md">Plain-text version</a>.</p>\n<p class="updated muted">Last updated ${fdate(TODAY)}. Sources: border data from <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a>, land and rivers from Natural Earth; texts written for Chronica Maps from standard reference works. <a href="/about#sources-and-method">How we make the maps</a>.</p>`}
 ${featAside(url)}
 </main>${tool ? `\n<script>window.APP_V="${VER}"</script><script src="/vendor/d3.min.js"></script><script src="/tools.js?v=${VER}"></script>` : ''}
 <footer><p>Historical borders are schematic approximations, not surveyed boundaries. Border data: <a href="https://github.com/aourednik/historical-basemaps">historical-basemaps</a> (GPL-3.0); land and rivers: Natural Earth.</p><p><a href="/about">About</a> · <a href="/guide">How to use the map</a> · <a href="/en/topics">Featured topics</a> · <a href="/en/anniversaries/${new Date().getUTCFullYear()}">Anniversaries</a></p><p><a href="/">Interactive map</a> · ${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join(' · ')}</p></footer>
@@ -335,6 +336,7 @@ ${sites.length ? `<h2>Battles and sites in this period</h2><ul class="links">${s
 <p>Part of the era: <a href="/en/era/${era.slug}">${esc(era.name)}</a>. See also <a href="/en/world/${yearSlug(s)}">the world in ${fy(s)}</a>.</p>`;
   add(`/en/year/${yearSlug(s)}`, page({ url: `/en/year/${yearSlug(s)}`, title: `Map of Europe in ${fy(s)}: Borders, Rulers & Events | Chronica Maps`,
     desc: cut(`See the borders of Europe in ${fy(s)}: ${fam3.join(', ')} and every other state on the map, with the rulers in power and key events up to ${fy(end)}.`),
+    facts: [`The border map of Europe for ${fy(s)} shows ${named.length} named states and peoples.`, `Largest states on the map: ${named.slice(0, 3).map(x => `${polName(x.n)} (about ${fmtKm2(x.area)})`).join(', ')}.`, ...(rul.length ? [`Rulers in ${fy(s)} included ${rul.slice(0, 4).map(r => `${r.name} (${r.realm})`).join(', ')}.`] : []), ...(evs.length ? [`Key events from ${fy(s)} to ${fy(end)}: ${evs.slice(0, 3).map(e => `${e.t.replace(/\.$/, '')} (${fy(e.y)})`).join('; ')}.`] : []), `This map covers ${fy(s)} until the next recorded border change in ${next !== undefined ? fy(next) : 'the present'}.`],
     h1: `Map of Europe in ${fy(s)}`, crumbs: [['Home', '/'], ['Years', '/en/years'], [fy(s), `/en/year/${yearSlug(s)}`]], body,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: `Map of Europe in ${fy(s)}`, inLanguage: 'en', image: `${SITE}/maps/${yearSlug(s)}.svg`, dateModified: TODAY }] }));
 }
@@ -364,6 +366,7 @@ ${sites.length ? `<h2>Battles and sites in this period</h2><ul class="links">${s
 <p class="pn">${prev !== undefined ? `<a href="/en/world/${yearSlug(prev)}">← The world in ${fy(prev)}</a>` : '<span></span>'}${next !== undefined ? `<a href="/en/world/${yearSlug(next)}">The world in ${fy(next)} →</a>` : ''}</p>`;
   add(`/en/world/${yearSlug(s)}`, page({ url: `/en/world/${yearSlug(s)}`, title: `World Map in ${fy(s)}: Empires, Borders & Events | Chronica Maps`,
     desc: cut(`See the world in ${fy(s)} on one map: ${famW.join(', ')} and every other state, with key events, battles and the largest empires of the time.`),
+    facts: [`The world border map for ${fy(s)} shows ${named.length} named states, empires and peoples.`, `Largest state in ${fy(s)}: ${polName(named[0].n)}, about ${fmtKm2(named[0].area)}.`, `Next largest: ${named.slice(1, 5).map(x => `${polName(x.n)} (${fmtKm2(x.area)})`).join(', ')}.`, ...(wr.length ? [`Rulers in ${fy(s)} included ${wr.slice(0, 4).map(r => `${r.name} (${r.realm})`).join(', ')}.`] : []), ...(evs.length ? [`Key events from ${fy(s)} to ${fy(end)}: ${evs.slice(0, 3).map(e => `${e.t.replace(/\.$/, '')} (${fy(e.y)})`).join('; ')}.`] : [])],
     h1: `World Map in ${fy(s)}`, crumbs: [['Home', '/'], ['World maps', '/en/world'], [fy(s), `/en/world/${yearSlug(s)}`]], body,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: `World Map in ${fy(s)}`, inLanguage: 'en', image: `${SITE}${mapUrl(s, 'world')}`, dateModified: TODAY }] }));
 }
@@ -400,6 +403,13 @@ ${peopleIn(c.id).length ? `<h2>Famous people of ${esc(c.name)}</h2>${table(['Liv
 ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a href="/en/city/${x.c.id}">${esc(x.c.name)}</a> · about ${Math.round(x.d)} km</li>`).join('')}</ul>` : ''}`;
   add(`/en/city/${c.id}`, page({ url: `/en/city/${c.id}`, title: [2, 1, 0].map(k => `${c.name} History: Former Names${old.length && k ? ` (${old.slice(0, k).join(', ')})` : ''} & Timeline Map`).find(t => t.length <= 62) || `${c.name} History, Former Names & Timeline`,
     desc: cut(`${c.bio.slice(0, 40).includes(c.name) ? '' : c.name + ': '}${c.bio} Former names, key dates and every state that ruled ${c.name}, on a historical map.`),
+    facts: (() => { const st = [...new Set(rows.filter(r => r.n).map(r => polName(r.n)))], m = modernOf(c.c), f = [];
+      if (m && m !== c.name) f.push(`${c.name} is in present-day ${m}, at ${fmtLL(c.c)}.`);
+      if (c.names.length > 1) f.push(`Earliest name on record here: ${c.names[0].name} (from ${fy(c.names[0].from)}); other former names: ${[...new Set(c.names.slice(1).map(n => n.name.split(' / ')[0]))].filter(n => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '') !== c.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')).join(', ') || 'none'}.`);
+      if (c.ev.length) f.push(`First event in its timeline: ${c.ev[0].t.replace(/\.$/, '')} (${fy(c.ev[0].y)}).`);
+      if (st.length) f.push(`On the border maps, ${c.name} lies within ${st.length} different state${st.length > 1 ? 's' : ''}, from ${st[0]} to ${st.at(-1)}.`);
+      if (peopleIn(c.id).length) f.push(`Famous people connected with ${c.name}: ${peopleIn(c.id).slice(0, 4).map(p => p.name).join(', ')}.`);
+      return f; })(),
     h1: esc(h1), crumbs: [['Home', '/'], ['Cities', '/en/cities'], [c.name, `/en/city/${c.id}`]], body,
     ld: [{ '@context': 'https://schema.org', '@type': 'Place', name: c.name, alternateName: old, description: c.bio, geo: { '@type': 'GeoCoordinates', latitude: c.c[1], longitude: c.c[0] } }] }));
 }
@@ -437,7 +447,7 @@ for (const st of STATE_LIST) {
   { const ss = [...new Set(st.maps.map(m => m.s))].sort((a, b) => a - b), nm = st.name.replace(/^the /i, ''), The = art(nm) !== nm ? 'the ' : '', Nm = The ? 'The ' + nm : nm;
     const mods = [...new Set(feats(SNAPS.at(-1)).filter(f => f.properties.n && !isTribal(f.properties.n) && inB(st.peak.f._b, geoCentroid(f)) && geoContains(st.peak.f, geoCentroid(f))).map(f => CN2[f.properties.n] || polName(f.properties.n)))].filter(m => m !== st.name);
     const qa = [[`When does ${The}${nm} appear on the map?`, ss.length === 1 ? `${Nm} appears on one border map, the map for ${fy(ss[0])}.` : `${Nm} appears on ${ss.length} of the ${SNAPS.length} border maps, from ${fy(ss[0])}${ss.at(-1) === SNAPS.at(-1) ? ' to today' : ` to ${fy(ss.at(-1))}`}.`],
-      [`When was ${The}${nm} at its largest?`, `On the map for ${fy(st.peak.s)}, with about ${fmtKm2(st.peak.area)}.`]];
+      [`When was ${The}${nm} at its largest?`, `${Nm} was at its largest on the map for ${fy(st.peak.s)}, with about ${fmtKm2(st.peak.area)}.`]];
     if (mods.length) qa.push([`Which present-day countries were part of ${The}${nm}?`, `At its largest, ${The}${nm} covered all or part of ${mods.slice(0, 15).join(', ')}${mods.length > 15 ? ' and others' : ''}.`]);
     st._qa = qa; EXTRA_LD[`/en/state/${st.slug}`] = [qaLd(qa)]; }
   EXTRA[`/en/state/${st.slug}`] = qaBlock('Questions', st._qa) + pBlock(`Famous people who lived under the ${esc(st.name.replace(/^the /i, ''))}`, PEOPLE.filter(p => P_STATES.get(p.id).has(st.n)).sort((a, b) => a.y[0] - b.y[0]));
@@ -462,6 +472,7 @@ ${rul.length ? `<h2>Rulers (${esc(E.rulersT[realm.k])})</h2>${table(['Reign', 'R
 ${kin.length ? `<h2>Related states in the same lineage</h2><ul class="links">${kin.map(o => `<li><a href="/en/state/${o.slug}">${esc(o.name)}</a></li>`).join('')}</ul>` : ''}`;
   add(`/en/state/${st.slug}`, page({ url: `/en/state/${st.slug}`, title: `${st.name} Map: Borders Over Time (${fyShort(first)}–${fyShort(last)}) | Chronica Maps`,
     desc: cut(`See ${art(st.name)} on ${new Set(st.maps.map(m => m.s)).size} historical maps from ${fy(first)} to ${fy(last)}: its territory on each map, its greatest extent in ${fy(peak.s)}, cities, rulers and famous people.`),
+    facts: [...st._qa.map(([, a]) => a), ...(rul.length ? [`Rulers on these maps run from ${rul[0].name} to ${rul.at(-1).name}.`] : []), ...(inside.length ? [`Cities inside its borders in ${fy(peak.s)} include ${inside.slice(0, 6).map(c => c.name).join(', ')}.`] : [])],
     h1: `${esc(st.name)}: Map &amp; Borders Over Time`, crumbs: [['Home', '/'], ['States', '/en/states'], [st.name, `/en/state/${st.slug}`]], body,
     ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: `${st.name}: Map & Borders Over Time`, inLanguage: 'en', dateModified: TODAY }] }));
 }
@@ -770,6 +781,7 @@ ${qaBlock('Questions', qa)}
 {
   const best = Object.values(stInfo).map(st => { let b = null; for (const s2 of new Set(st.maps.map(m => m.s))) { const a = LAREA[s2] && LAREA[s2][st.n]; if (a && (!b || a > b.a)) b = { s: s2, a }; } return b && { n: st.n, ...b }; })
     .filter(x => x && /^[A-Z]/.test(x.n) && !/^(Antarctica|Greenland|Russia|Russian Federation|Canada|United States|United States of America|China|Brazil|Kingdom of Brazil|Empire of Brazil|Australia|USSR|White Russia|Mongolia|Argentina|India|Kazakhstan)$/i.test(x.n) && x.s < 1950).sort((a, b) => b.a - a.a).slice(0, 50);
+  globalThis.BEST_EMP = best;
   const qa = [['What was the largest empire in history?', `On these maps, the largest state before 1950 is ${polName(best[0].n)}, with about ${fmtKm2(best[0].a)} on the map for ${fy(best[0].s)}. Area figures in history books differ because they count claimed land and dependencies differently; overseas empires such as the British appear on these maps as separate colonies, so they do not show as one state.`],
     ['What were the largest empires in history?', best.slice(0, 10).map((x, k) => `${k + 1}. ${polName(x.n)} (${fmtKm2(x.a)}, ${fy(x.s)})`).join('; ') + '.']];
   add('/en/largest-empires', page({ url: '/en/largest-empires', title: 'Largest Empires in History, Ranked by Map Area', desc: cut(`The 50 largest empires and states before 1950, ranked by the area they cover at their peak on the historical border maps, with links to the map of each year.`),
@@ -978,6 +990,29 @@ const SKIP = new Set(['build.mjs', 'package.json', 'package-lock.json', 'vercel.
 for (const f of fs.readdirSync(ROOT)) if (!SKIP.has(f) && !f.startsWith('.') && fs.statSync(path.join(ROOT, f)).isFile()) fs.copyFileSync(path.join(ROOT, f), path.join(OUT, f));
 const write = (rel, data) => { const p = path.join(OUT, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
 for (const p of pages) write(p.url + '.html', p.html);
+// ---------- Markdown copies of every indexable page, for AI crawlers and answer engines ----------
+const unent = t => t.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+const absU = u => (u.startsWith('/') ? SITE + u : u);
+const inl = h => unent(h.replace(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, (_, u, t) => `[${t.replace(/<[^>]+>/g, '').trim()}](${absU(u)})`).replace(/<(strong|b)>([\s\S]*?)<\/\1>/g, '**$2**').replace(/<(em|i)>([\s\S]*?)<\/\1>/g, '*$2*').replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+function toMd(p) {
+  const h = p.html, title = unent((h.match(/<h1>([\s\S]*?)<\/h1>/) || [, ''])[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+  const desc = unent((h.match(/<meta name="description" content="([^"]*)"/) || [, ''])[1]);
+  let m = (h.match(/<\/h1>([\s\S]*?)<p class="cite/) || h.match(/<\/h1>([\s\S]*?)<aside class="featured"/) || [, ''])[1];
+  m = m.replace(/<details class="embed">[\s\S]*?<\/details>/g, '').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<span class="pin"[\s\S]*?<\/span><\/span>/g, '')
+    .replace(/<p><a class="btn" href="([^"]+)">([\s\S]*?)<\/a><\/p>/g, (_, u, t) => `\n\n[${inl(t)}](${absU(u)})\n\n`)
+    .replace(/<figure class="map">[\s\S]*?<img src="([^"]+)"[^>]*alt="([^"]*)"[\s\S]*?<figcaption>([\s\S]*?)<\/figcaption><\/figure>/g, (_, src, alt, cap) => `\n\n![${unent(alt)}](${absU(src)})\n\n${inl(cap)}\n\n`)
+    .replace(/<figure[\s\S]*?<\/figure>/g, '')
+    .replace(/<div class="tw"><table>([\s\S]*?)<\/table><\/div>/g, (_, t) => { const rows = [...t.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(r => [...r[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/g)].map(c => inl(c[1]).replace(/\|/g, '\\|'))); if (!rows.length) return ''; const head = /<thead>/.test(t) ? rows.shift() : rows[0].map(() => ''); return `\n\n| ${head.join(' | ')} |\n| ${head.map(() => '---').join(' | ')} |\n${rows.map(r => `| ${r.join(' | ')} |`).join('\n')}\n\n`; })
+    .replace(/<h([23])[^>]*>([\s\S]*?)<\/h\1>/g, (_, l, t) => `\n\n${'#'.repeat(+l)} ${inl(t)}\n\n`)
+    .replace(/<li[^>]*>([\s\S]*?)<\/li>/g, (_, t) => `\n- ${inl(t)}`)
+    .replace(/<p[^>]*>([\s\S]*?)<\/p>/g, (_, t) => `\n\n${inl(t)}\n\n`)
+    .replace(/<\/?(ul|ol|section|div|nav|details|summary|aside)[^>]*>/g, '\n').replace(/<[^>]+>/g, '');
+  m = unent(m).split('\n').map(l => l.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return `# ${title}\n\nSource: ${SITE}${p.url}\nUpdated: ${TODAY}\n\n> ${desc}\n\n${m}\n\n---\nCite as: Chronica Maps, "${title}", ${SITE}${p.url}, updated ${fdate(TODAY)}. Historical borders are schematic approximations based on the historical-basemaps dataset (GPL-3.0) and Natural Earth.\n`;
+}
+const MD = new Map();
+for (const p of pages) if (!p.noSitemap && !/noindex/.test(p.html.slice(0, 2000)) && /<link rel="alternate" type="text\/markdown"/.test(p.html)) { const md = toMd(p); MD.set(p.url, md); write(p.url + '.md', md); }
+console.log(`markdown pages: ${MD.size}`);
 // cache-busting: stamp script URLs in the app shell with this build's version
 write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/__V__/g, VER));
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
@@ -1055,7 +1090,37 @@ const smGroups = {}; for (const u of urls) (smGroups[SECT(u)] ||= []).push(u);
 for (const [g, list] of Object.entries(smGroups)) write(`sitemap-${g}.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n${list.map(u => `  <url><loc>${SITE}${u}</loc><lastmod>${TODAY}</lastmod>${(IMGS[u] || []).map(i => `<image:image><image:loc>${esc(i.t960 || i.t500)}</image:loc></image:image>`).join('')}</url>`).join('\n')}\n</urlset>\n`);
 write('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Object.keys(smGroups).map(g => `  <sitemap><loc>${SITE}/sitemap-${g}.xml</loc><lastmod>${TODAY}</lastmod></sitemap>`).join('\n')}\n</sitemapindex>\n`);
 write('feed.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Chronica Maps: Featured topics</title><link>${SITE}/en/topics</link><atom:link href="${SITE}/feed.xml" rel="self" type="application/rss+xml"/><description>Map stories on history anniversaries and questions in the news.</description><language>en</language>\n${[...FEAT].sort((a, b) => b.date.localeCompare(a.date)).map(f => `<item><title>${esc(f.title)}</title><link>${SITE}/en/topics/${f.slug}</link><guid>${SITE}/en/topics/${f.slug}</guid><pubDate>${new Date(f.date + 'T08:00:00Z').toUTCString()}</pubDate><description>${esc(f.desc)}</description></item>`).join('\n')}\n</channel></rss>\n`);
-write('llms.txt', `# Chronica Maps\n\n> Free interactive historical atlas of the world: ${SNAPS.length} border maps from ${fy(SNAPS[0])} to today, with ${CITIES.length} historic cities, ${SITES.length} battles and sites, ${LMS.length} landmarks, ${PEOPLE.length} famous people, ${JOURNEYS.length} journeys and ${ROUTES.length} trade routes. Every page is static HTML in English. Borders are schematic approximations based on the open historical-basemaps dataset (GPL-3.0).\n\n## Main sections\n- [Interactive map](${SITE}/): drag the timeline; deep links like ${SITE}/#y1453-c-istanbul\n- [World maps by year](${SITE}/en/world)\n- [Europe by year](${SITE}/en/years)\n- [Historic cities](${SITE}/en/cities): former names, timelines and who ruled each city\n- [Famous people](${SITE}/en/people): lives, places and contemporaries\n- [States and empires](${SITE}/en/states): territory over time\n- [Battles and sites](${SITE}/en/battles)\n- [Landmarks then and now](${SITE}/en/landmarks)\n- [Journeys](${SITE}/en/journeys) and [trade routes](${SITE}/en/routes)\n- [Eras](${SITE}/en/eras)\n- [Town histories](${SITE}/en/towns): what country was each town in\n- [Featured topics](${SITE}/en/topics)\n\n## Tools\n- [Daily map puzzle](${SITE}/daily)\n- [Compare two years](${SITE}/compare)\n- [What country was my town in?](${SITE}/town)\n- [True size of empires](${SITE}/size)\n- [Animate borders](${SITE}/animate)\n\n## About\n- [About, sources and how to cite](${SITE}/about)\n- [How to use the map](${SITE}/guide)\n`);
+{ // llms.txt: a short guide for AI assistants; llms-full.txt: the core reference pages as one Markdown file
+  const md = u => `${SITE}${u}.md`, B = globalThis.BEST_EMP || [];
+  const L = [`# Chronica Maps`, ``, `> Chronica Maps (chronicamaps.com) is a free interactive historical atlas of the world: ${SNAPS.length} border maps from ${fy(SNAPS[0])} to today, with ${CITIES.length} historic cities, ${SITES.length} battles and sites, ${LMS.length} landmarks, ${PEOPLE.length} famous people, ${JOURNEYS.length} journeys and ${ROUTES.length} trade routes.`, ``,
+    `Every page is static HTML in English, and every content page also has a plain Markdown copy: add \`.md\` to the URL (for example ${md('/en/world/1500')}). Pages open with a "Quick facts" list of short, self-contained statements that can be quoted directly.`, ``,
+    `Borders are schematic approximations drawn from the open historical-basemaps dataset (GPL-3.0) and Natural Earth; areas are measured from those polygons and are approximate. Overseas colonial empires appear as separate colonies. When citing, name "Chronica Maps" and link the page URL.`, ``,
+    `## Key facts from the maps`,
+    ...(B.length ? [`- Largest state before 1950 on these maps: ${polName(B[0].n)}, about ${fmtKm2(B[0].a)} on the map for ${fy(B[0].s)}. Full ranking: [Largest empires in history](${md('/en/largest-empires')})`] : []),
+    `- Map years: ${SNAPS.map(fy).join(', ')}.`,
+    `- Each city page lists the city's former names, a dated timeline and every state that ruled it, derived from the border maps.`, ``,
+    `## Reference pages (Markdown)`,
+    `- [World maps by year](${md('/en/world')}): one page per map year, with the largest states, rulers and key events`,
+    `- [Europe by year](${md('/en/years')})`,
+    `- [Largest empires in history](${md('/en/largest-empires')})`,
+    `- [Compare two maps](${md('/en/compare')}): what changed between two years in a region`,
+    `- [Historic cities](${md('/en/cities')}): former names, timelines and who ruled each city`,
+    `- [Old names of places, A–Z](${md('/en/old-names')})`,
+    `- [Countries today and their history](${md('/en/countries')})`,
+    `- [States and empires](${md('/en/states')}): territory on each map`,
+    `- [Famous people](${md('/en/people')})`,
+    `- [Battles and sites](${md('/en/battles')})`, `- [Landmarks then and now](${md('/en/landmarks')})`,
+    `- [Journeys](${md('/en/journeys')}) and [trade routes](${md('/en/routes')})`, `- [Eras](${md('/en/eras')})`,
+    `- [Town histories](${md('/en/towns')}): what country was each town in`,
+    `- [Featured topics](${md('/en/topics')})`, ``,
+    `## World map by year`, ...SNAPS.map(x => `- [The world in ${fy(x)}](${md('/en/world/' + yearSlug(x))})`), ``,
+    `## Interactive tools`, `- [Interactive map](${SITE}/): drag the timeline; deep links such as ${SITE}/#y1453-c-istanbul`,
+    `- [Compare two years](${SITE}/compare), [What country was my town in?](${SITE}/town), [True size of empires](${SITE}/size), [Animate borders](${SITE}/animate), [Daily map puzzle](${SITE}/daily)`, ``,
+    `## About`, `- [About, sources and how to cite](${md('/about')})`, `- [How to use the map](${md('/guide')})`, `- [Full reference text](${SITE}/llms-full.txt): the core pages above in one file`, ``];
+  write('llms.txt', L.join('\n'));
+  const core = ['/about', '/en/largest-empires', '/en/world', ...SNAPS.map(x => '/en/world/' + yearSlug(x)), '/en/years', ...SNAPS.map(x => '/en/year/' + yearSlug(x)), ...FEAT.map(f => '/en/topics/' + f.slug)];
+  write('llms-full.txt', `# Chronica Maps: reference text\n\nGenerated ${TODAY} from ${SITE}. ${core.filter(u => MD.has(u)).length} pages follow, separated by horizontal rules.\n\n` + core.filter(u => MD.has(u)).map(u => MD.get(u)).join('\n\n---\n\n'));
+}
 
 // ---------- IndexNow: tell Bing / Yandex (and through them ChatGPT search) which pages changed ----------
 {
@@ -1078,5 +1143,5 @@ write('llms.txt', `# Chronica Maps\n\n> Free interactive historical atlas of the
   } else console.log(`IndexNow: ${Object.keys(hashes).length} page hashes written (submission only runs on production builds)`);
 }
 write('data/tools-meta.json', TOOLS_META);
-write('robots.txt', `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);
+write('robots.txt', `# Search engines and AI assistants are welcome to read, index and cite these pages.\n# Plain Markdown copies: append .md to any page URL. Overview: ${SITE}/llms.txt\n\nUser-agent: *\nAllow: /\n\n${['Googlebot', 'Bingbot', 'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'ClaudeBot', 'Claude-SearchBot', 'Claude-User', 'PerplexityBot', 'Perplexity-User', 'Google-Extended', 'Applebot', 'Applebot-Extended', 'DuckAssistBot', 'Amazonbot', 'meta-externalagent', 'MistralAI-User', 'CCBot'].map(b => `User-agent: ${b}\nAllow: /\n`).join('\n')}\nSitemap: ${SITE}/sitemap.xml\n`);
 console.log(`Built ${pages.length} pages + ${SNAPS.length} maps → dist/`);

@@ -113,3 +113,8 @@ h2 small,h3 small{color:var(--muted);font-weight:400}
 
 .cmp2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.cmp2 figure{margin:0}@media(max-width:700px){.cmp2{grid-template-columns:1fr}}
 .az a{display:inline-block;min-width:22px;text-align:center;margin:2px;padding:2px 4px;border:1px solid var(--line);border-radius:3px;text-decoration:none}
+.facts{background:#f7efdc;border-left:4px solid #a8322a;padding:.6em 1em;margin:1em 0;border-radius:4px}
+.facts h2{font-size:1.05em;margin:.2em 0 .4em}
+.facts ul{margin:0;padding-left:1.2em}
+.facts li{margin:.25em 0}
+.cite{font-size:.85em;margin-top:2em}
