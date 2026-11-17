@@ -124,3 +124,12 @@ h2 small,h3 small{color:var(--muted);font-weight:400}
   .map-first .top nav a{flex:none;white-space:nowrap}
   .map-first main>.map img{max-width:100%;height:auto}
 }
+
+/* Allow the local field guide to wrap naturally inside the route's mobile table. */
+@media (max-width: 640px) {
+  a[data-bridge-id="cm-stops-trail"] {
+    display: inline-block;
+    min-width: 8.5rem;
+    line-height: 1.4;
+  }
+}

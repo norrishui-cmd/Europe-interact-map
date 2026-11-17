@@ -13,6 +13,9 @@ const ROOT = process.cwd();
 const OUT = path.join(ROOT, 'dist');
 const SITE = 'https://chronicamaps.com';
 const VER = (process.env.VERCEL_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 10);
+const bridgeMeasurement = /^G-[A-Z0-9]+$/.test(process.env.PUBLIC_GA_MEASUREMENT_ID || '') ? process.env.PUBLIC_GA_MEASUREMENT_ID : '';
+const bridgePages = new Set(['/en/route/silk-road', '/en/city/dunhuang', '/en/landmark/mogao']);
+const bridgeScript = `<script defer src="/atlas-bridge.js?v=${VER}" data-site="chronica" data-ga="${bridgeMeasurement}"></script>`;
 const TODAY = new Date().toISOString().slice(0, 10);
 const R_KM = 6371;
 const ORG = { '@type': 'Organization', name: 'Chronica Maps', url: 'https://chronicamaps.com', logo: 'https://chronicamaps.com/icon-512.png' };
@@ -279,7 +282,7 @@ ${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<link rel="stylesheet" href="/assets/page.css">
+<link rel="stylesheet" href="/assets/page.css">${bridgePages.has(url) ? '\n' + bridgeScript : ''}
 ${lds}
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9505220977121599"\n     crossorigin="anonymous"></script>
 </head>
@@ -416,7 +419,7 @@ ${table(['Year', 'Event'], c.ev.map(e => [`<a href="/en/year/${yearSlug(snapFor(
 <p class="muted">Derived from the border maps; each row runs until the next recorded border change.</p>
 ${table(['Period', 'State'], rows.map(r => [`${fyShort(r.from)}–${r.to >= 2026 ? 'today' : fyShort(r.to)}`, stLink(r.n)]))}
 ${ns.length ? `<h2>Battles and sites near ${esc(c.name)}</h2><ul class="links">${ns.map(x => `<li><a href="/en/battle/${x.id}">${esc(x.title)}</a> · ${fy(x.y)}</li>`).join('')}</ul>` : ''}
-${lmNear(c.c, 60).length ? `<h2>Landmarks in and around ${esc(c.name)}</h2><ul class="lmgrid">${lmNear(c.c, 60).map(lmCard).join('')}</ul>` : ''}
+${lmNear(c.c, 60).length ? `<h2>Landmarks in and around ${esc(c.name)}</h2><ul class="lmgrid">${lmNear(c.c, 60).map(lmCard).join('')}</ul>` : ''}${c.id === 'dunhuang' ? '<p><a href="https://dunhuangwithin.com/dunhuang-map/#dunhuang-map-guides" data-bridge-id="cm-city-guides">Explore Mogao and the frontier passes</a> on the illustrated trail map from Dunhuang Within. Its guides cover the caves southeast of the oasis and the routes west through Yumen Pass and Yang Pass.</p>' : ''}
 ${peopleIn(c.id).length ? `<h2>Famous people of ${esc(c.name)}</h2>${table(['Lived', 'Person', ''], peopleIn(c.id).map(p => [lifeY(p), `<a href="/en/person/${p.id}">${esc(p.name)}</a>`, esc(p.role)]))}` : ''}
 ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a href="/en/city/${x.c.id}">${esc(x.c.name)}</a> · about ${Math.round(x.d)} km</li>`).join('')}</ul>` : ''}`;
   add(`/en/city/${c.id}`, page({ url: `/en/city/${c.id}`, title: [2, 1, 0].map(k => `${c.name} History: Former Names${old.length && k ? ` (${old.slice(0, k).join(', ')})` : ''} & Timeline Map`).find(t => t.length <= 62) || `${c.name} History, Former Names & Timeline`,
@@ -553,7 +556,7 @@ for (const m of LMS) {
   const near = lmNear(m.c, 500, m.id).slice(0, 6), ns = nearSites(m.c, 150);
   const alt1 = `${m.name}, ${THEN[m.st].toLowerCase()}`, alt2 = `${m.name}, ${NOW[m.st].toLowerCase()}`;
   EXTRA[`/en/landmark/${m.id}`] = further(m.name);
-  const body = `<p class="lead">${esc(m.d.en)}</p>
+  const body = `<p class="lead">${esc(m.d.en)}</p>${m.id === 'mogao' ? '<p><a href="https://dunhuangwithin.com/places/dunhuang/cave-17/" data-bridge-id="cm-mogao-cave">What was found in Cave 17?</a> Dunhuang Within traces the manuscripts, paintings and textiles from the Library Cave to the collections that hold them today.</p>' : ''}
 <div class="lmgal">${fig(m.img.then, THEN[m.st], alt1)}${fig(m.img.now, NOW[m.st], alt2)}</div>
 <h2>Key facts</h2>
 ${table(['', ''], [['Country today', `<a href="/en/landmarks/${ctySlug(m.country)}">${esc(m.country)}</a>`], ['Status', STATUS[m.st]], ['Date', `<a href="/en/year/${yearSlug(s)}">${fy(m.y)}</a>`], ...(nc ? [['Nearest city on the map', `<a href="/en/city/${nc.c.id}">${esc(nc.c.name)}</a> (about ${Math.round(nc.d)} km)`]] : []), ['Location', fmtLL(m.c, 3)]])}
@@ -685,7 +688,14 @@ for (const r of ROUTES) {
   const named = r.pts.filter(p => p[2]);
   let km = 0; for (let i = 1; i < lls.length; i++) km += geoDistance(lls[i - 1], lls[i]) * R_KM;
   const snapsIn = SNAPS.filter(v => v >= r.y[0] && v <= r.y[1]), show = snapsIn.length > 4 ? [snapsIn[0], snapsIn[Math.floor(snapsIn.length / 3)], snapsIn[Math.floor((2 * snapsIn.length) / 3)], snapsIn.at(-1)] : snapsIn;
-  const placeCell = p => { const c = CITIES.find(c => geoDistance(c.c, [p[0], p[1]]) * R_KM < 40); return c ? `<a href="/en/city/${c.id}">${esc(p[2])}</a>` : esc(p[2]); };
+  const placeCell = p => {
+    const c = CITIES.find(city => geoDistance(city.c, [p[0], p[1]]) * R_KM < 40);
+    const name = c ? `<a href="/en/city/${c.id}">${esc(p[2])}</a>` : esc(p[2]);
+    if (r.id === 'silk-road' && c?.id === 'dunhuang') {
+      return name + '<br><small><a href="https://dunhuangwithin.com/dunhuang-map/#dunhuang-atlas" data-bridge-id="cm-stops-trail">Explore the local Dunhuang trail</a></small>';
+    }
+    return name;
+  };
   const lead = `${r.n.en} (${fy(r.y[0])} – ${fy(r.y[1])}): ${r.d.en}`;
   const body = `<p class="lead">${esc(r.d.en)}</p>
 ${mapBlock(s, `Map of the ${r.n.en} in ${fy(s)}`, overlay, rg)}
@@ -1044,7 +1054,7 @@ const MD = new Map();
 for (const p of pages) if (!p.noSitemap && !/noindex/.test(p.html.slice(0, 2000)) && /<link rel="alternate" type="text\/markdown"/.test(p.html)) { const md = toMd(p); MD.set(p.url, md); write(p.url + '.md', md); }
 console.log(`markdown pages: ${MD.size}`);
 // cache-busting: stamp script URLs in the app shell with this build's version
-write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/__V__/g, VER));
+write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace('<!--ATLAS_BRIDGE-->', bridgeScript).replace(/__V__/g, VER));
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
 const SVGS = new Map();
 for (const k of NEED) { const [r, s] = k.split('|'); const svg = mapSVG(+s, r); SVGS.set(k, svg); write(mapUrl(+s, r).slice(1), svg); }

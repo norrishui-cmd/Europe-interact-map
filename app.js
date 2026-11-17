@@ -188,9 +188,14 @@ function routeCard(r){
   stopPlay();if(year<r.y[0]||year>r.y[1])setYear(Math.max(-500,Math.round((r.y[0]+r.y[1])/2)));
   if(!layers.routes){layers.routes=true;d3.selectAll(".tbtn[data-t=routes]").classed("on",true)}
   const onSite=/chronicamaps\.com$|vercel\.app$/.test(location.hostname), named=r.pts.filter(p=>p[2]);
+  const stopRows = named.map((point, i) => {
+    const localTrail = LANG === "en" && r.id === "silk-road" && point[2] === "Dunhuang"
+      ? '<br><a href="https://dunhuangwithin.com/dunhuang-map/#dunhuang-atlas" data-bridge-id="cm-panel-stops-trail">Explore the local Dunhuang trail</a>' : "";
+    return `<tr><td class="y">${i+1}</td><td><a href="javascript:void 0" data-rp="${r.pts.indexOf(point)}">${esc(point.L)}</a>${localTrail}</td></tr>`;
+  }).join("");
   openPanel(`<h2>${esc(r.N)}</h2><div class="latin">${fmtYFull(r.y[0])} – ${fmtYFull(r.y[1])}</div><div class="bio">${esc(r.D)}</div>
   ${onSite?`<p><a href="/en/route/${r.id}">${esc(U.lmPage)}</a></p>`:""}
-  <div class="sec">${esc(U.routeStops)}</div><table>${named.map((p,i)=>`<tr><td class="y">${i+1}</td><td><a href="javascript:void 0" data-rp="${r.pts.indexOf(p)}">${esc(p.L)}</a></td></tr>`).join("")}</table>`);
+  <div class="sec">${esc(U.routeStops)}</div><table>${stopRows}</table>`);
   d3.selectAll("#pbody [data-rp]").on("click",function(){const p=r.pts[+this.dataset.rp];flyTo([p[0],p[1]]);pulse([p[0],p[1]])});
   const xs=r.pts.map(p=>projection([p[0],p[1]]));flyBox(d3.min(xs,p=>p[0]),d3.min(xs,p=>p[1]),d3.max(xs,p=>p[0]),d3.max(xs,p=>p[1]));
   drawRoutes();placeOverlays();lastCard="t-"+r.id;writeHash();window.QEV&&QEV("route",r.id);
@@ -375,6 +380,7 @@ function cityCard(c){
   const evs=[...c.ev].sort((a,b)=>a[0]-b[0]);
   const ns=nearbySites(c.c,120);
   openPanel(`<h2>${esc(c.zh)}</h2><div class="latin">${esc(cur[1])}</div><div class="bio">${esc(c.bio)}</div>
+  ${LANG === "en" && c.id === "dunhuang" ? '<p><a href="https://dunhuangwithin.com/dunhuang-map/?layer=travel&amp;place=yumen#dunhuang-atlas" data-bridge-id="cm-panel-city-yumen">Find Yumen Pass on the local Dunhuang map</a></p>' : ""}
   <div class="sec">${U.names}</div><table>${c.names.map(n=>`<tr><td class="y" data-y="${Math.max(MINY,n[0])}">${fill(U.since,{y:fmtY(n[0])})}</td><td><b>${esc(n[1])}</b>${n[2]?` · <span style="color:#7a6648">${esc(n[2])}</span>`:""}</td></tr>`).join("")}</table>
   <div class="sec">${U.events}</div><table>${evs.map(e=>`<tr><td class="y" data-y="${Math.max(MINY,e[0])}" data-ll='${JSON.stringify(c.c)}'>${fmtY(e[0])}</td><td>${esc(e[1])}</td></tr>`).join("")}</table>
   ${ns.length?`<div class="sec">${U.nearby}</div><table>${ns.map(s=>`<tr><td class="y" data-y="${s.y}">${fmtY(s.y)}</td><td><a href="javascript:void 0" data-site="${s.id}">${esc(s.zh)}</a></td></tr>`).join("")}</table>`:""}
@@ -395,6 +401,7 @@ function landmarkCard(m){
   openPanel(`<h2>${esc(m.N)}</h2><div class="latin">${esc(m.N2||"")}</div>
   <div class="lmmeta"><span class="lmst st-${m.st}">${esc(U.lmStatus[m.st])}</span> ${esc(U.lmCountry)}: ${esc(m.C)} · <a href="javascript:void 0" data-y="${Math.max(-500,m.y)}">${fmtYFull(m.y)}</a></div>
   <div class="bio">${esc(m.D)}</div>
+  ${LANG === "en" && m.id === "mogao" ? '<p><a href="https://dunhuangwithin.com/places/dunhuang/cave-17/" data-bridge-id="cm-panel-mogao-cave">What was found in Cave 17?</a></p>' : ""}
   ${lmFig(m.img.then,U.lmThen[m.st])}${lmFig(m.img.now,U.lmNow[m.st])}
   ${onSite?`<p><a href="/en/landmark/${m.id}">${esc(U.lmPage)}</a></p>`:""}
   <div class="sec">${esc(U.lmCity)}</div><table><tr><td class="y">${Math.round(d)} ${esc(U.km)}</td><td><a href="javascript:void 0" data-city="${c.id}">${esc(c.zh)}</a></td></tr></table>
