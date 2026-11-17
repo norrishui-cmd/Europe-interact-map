@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
 import { geoProjection, geoPath, geoContains, geoArea, geoDistance, geoBounds, geoCentroid } from 'd3-geo';
+import { europeYearPage } from './seo/europe-years.mjs';
+import { sommePage } from './seo/somme.mjs';
+import { statePilot } from './seo/state-pages.mjs';
 
 const ROOT = process.cwd();
 const OUT = path.join(ROOT, 'dist');
@@ -236,14 +239,20 @@ const ogUrl = (s, r = 'europe') => `/og/${r}-${yearSlug(s)}.jpg`;
 const FEAT = [...(W.FEATURED || [])].sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.date.localeCompare(a.date));
 const featAside = url => { const l = FEAT.filter(f => `/en/topics/${f.slug}` !== url).slice(0, 4); return l.length ? `<aside class="featured" aria-label="Featured"><h2>Featured</h2><ul>${l.map(f => `<li><a href="/en/topics/${f.slug}">${esc(f.title)}</a></li>`).join('')}</ul><p><a href="/en/topics">All featured topics →</a></p></aside>` : ''; };
 const EXTRA = {}, EXTRA_LD = {};
-function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogType = 'article', noindex, facts }) {
-  if (facts && facts.length) { const box = `<section class="facts" aria-label="Quick facts"><h2>Quick facts</h2><ul>${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul></section>\n`; body = /^<p class="lead">/.test(body) ? body.replace(/^(<p class="lead">[\s\S]*?<\/p>\n?)/, m => m + box) : box + body; }
+function page({ url, title, desc, h1, crumbs, body, ld = [], ogImage, tool, ogType = 'article', noindex, facts, mapFirst = false }) {
+  if (facts && facts.length) {
+    const box = `<section class="facts" aria-label="Quick facts"><h2>Quick facts</h2><ul>${facts.map(f => `<li>${esc(f)}</li>`).join('')}</ul></section>\n`;
+    if (mapFirst && body.includes('</figure>')) body = body.replace('</figure>', match => match + '\n' + box);
+    else body = /^<p class="lead">/.test(body) ? body.replace(/^(<p class="lead">[\s\S]*?<\/p>\n?)/, m => m + box) : box + body;
+  }
   if (title.length > 62 && title.endsWith(' | Chronica Maps')) title = title.slice(0, -16);
   if (EXTRA[url]) body += EXTRA[url];
   if (EXTRA_LD[url]) ld = [...ld, ...EXTRA_LD[url]];
   body = body.replace(/<!--EMBED:([^>]*)-->/, (_, h) => embedBox(h, url, h1.replace(/&amp;/g, '&').replace(/<[^>]+>/g, ''))).replace(/<!--EMBED:[^>]*-->/g, '');
   if (!ogImage) { const m = body.match(/data-svg="\/maps\/(?:([a-z]+)\/)?([0-9]+(?:-bc)?)\.svg"/); if (m) ogImage = `/og/${m[1] || 'europe'}-${m[2]}.jpg`; }
-  const imgs = [...new Set([...body.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"[^>]*alt="([^"]*)"/g)].map(m => m[1] + '|' + m[2]))];
+  const creditedImages = new Set(ld.filter(item => item['@type'] === 'ImageObject').map(item => item.contentUrl));
+  const imgs = [...new Set([...body.matchAll(/src="(\/maps\/img\/[^"]+\.webp)"[^>]*alt="([^"]*)"/g)]
+    .filter(match => !creditedImages.has(SITE + match[1])).map(m => m[1] + '|' + m[2]))];
   if (imgs.length) ld = [...ld, ...imgs.map(x => { const [u, alt] = x.split('|'); return { '@context': 'https://schema.org', '@type': 'ImageObject', contentUrl: SITE + u, name: alt.replace(/&amp;/g, '&'), creditText: 'Chronica Maps', creator: ORG, copyrightNotice: 'Chronica Maps; border data historical-basemaps (GPL-3.0), Natural Earth', license: 'https://www.gnu.org/licenses/gpl-3.0.html', acquireLicensePage: SITE + '/about#using-and-citing-the-maps' }; })];
   if (!noindex) ld = [...ld, { '@context': 'https://schema.org', '@type': 'WebPage', url: SITE + url, name: title, ...(facts && facts.length ? { abstract: facts.join(' ') } : {}), dateModified: TODAY, inLanguage: 'en', author: ORG, isPartOf: { '@type': 'WebSite', name: 'Chronica Maps', url: SITE }, publisher: ORG }];
   if (!ogImage) ogImage = '/og/world-1500.jpg';
@@ -274,7 +283,7 @@ ${ogAbs ? `<meta property="og:image" content="${ogAbs}">${/^\/og\//.test(ogImage
 ${lds}
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9505220977121599"\n     crossorigin="anonymous"></script>
 </head>
-<body>
+<body${mapFirst ? ' class="map-first"' : ''}>
 <header class="top"><a class="brand" href="/"><span class="seal">C</span>Chronica Maps</a><nav>${NAV.map(([t, u]) => `<a href="${u}">${t}</a>`).join('')}<a class="cta" href="/">Interactive map →</a></nav></header>
 <main>
 <nav class="crumbs" aria-label="Breadcrumb">${crumbs.map((c, i) => (i < crumbs.length - 1 ? `<a href="${c[1]}">${esc(c[0])}</a>` : `<span>${esc(c[0])}</span>`)).join(' › ')}</nav>
@@ -314,6 +323,15 @@ const lmNear = (ll, km, skip) => LMS.filter(o => o.id !== skip && geoDistance(o.
 const lmCard = o => `<li class="lmcard"><a href="/en/landmark/${o.id}">${o.img.now ? `<img src="${esc(o.img.now.t500)}" alt="${esc(o.name)} today" loading="lazy" width="500" height="${imgH(o.img.now)}">` : ''}<span class="t">${esc(o.name)}</span></a><span class="m">${esc(STATUS[o.st])} · ${fy(o.y)}</span></li>`;
 // ---------- year pages ----------
 for (const s of SNAPS) {
+  if (s === 1300 || s === 1938) {
+    const names = new Set(feats(s).map(f => f.properties.n));
+    const end = snapEnd(s);
+    const sites = SITES.filter(site => site.y > s && site.y <= end && regionOf(site.c) === 'europe');
+    const events = eventsIn(s + 1, end).filter(event => event.ll && regionOf(event.ll) === 'europe');
+    const pilot = europeYearPage(s, { openBtn, table, site: SITE, today: TODAY, names, sites, events, stateUrl, polName, esc });
+    add(pilot.url, page(pilot));
+    continue;
+  }
   { const e2 = snapEnd(s), L = alive(s, e2).filter(p => p.ll && regionOf(p.ll) === 'europe').sort((a, b) => a.y[0] - b.y[0]); EXTRA[`/en/year/${yearSlug(s)}`] = pBlock(`Famous people in Europe, ${fy(s)} to ${fy(e2)}`, spread(L, 12)); }
   const end = snapEnd(s), era = ERAS.find(e => s >= e.from && s < e.to) || ERAS.at(-1);
   const named = feats(s).filter(f => f.properties.n && f.properties.n.trim() && !isTribal(f.properties.n) && P.centroid(f) && isFinite(P.centroid(f)[0]) && P.area(f) > 30)
@@ -416,6 +434,11 @@ ${nc.length ? `<h2>Nearby cities</h2><ul class="links">${nc.map(x => `<li><a hre
 
 // ---------- battle / site pages ----------
 for (const x of SITES) {
+  if (x.id === 'somme') {
+    const entry = sommePage(SITE, fmtLL, ORG, x);
+    add(entry.url, page(entry));
+    continue;
+  }
   { const nc = CITIES.slice().sort((a, b) => geoDistance(a.c, x.c) - geoDistance(b.c, x.c))[0], km = Math.round(geoDistance(nc.c, x.c) * R_KM), m = modernOf(x.c), n = polityAt(x.c, snapFor(x.y)), qa = [];
     qa.push([`Where did the ${x.title.replace(/^the /i, '')} take place?`, `${km < 15 ? `At ${nc.name}` : `About ${Math.round(km / 5) * 5} km from ${nc.name}`}${m ? `, in present-day ${m}` : ''}. Coordinates: ${x.c[1].toFixed(2)}°${x.c[1] >= 0 ? 'N' : 'S'}, ${Math.abs(x.c[0]).toFixed(2)}°${x.c[0] >= 0 ? 'E' : 'W'}.`]);
     qa.push([`When did the ${x.title.replace(/^the /i, '')} happen?`, `In ${fy(x.y)}.`]);
@@ -444,6 +467,13 @@ const P_STATES = new Map(PEOPLE.map(p => { const set = new Set(), lls = [...(p.c
   for (const s of SNAPS) if (s >= p.y[0] - 50 && s <= p.y[1]) for (const ll of lls) { const n = polityAt(ll, s); if (n) set.add(n); }
   return [p.id, set]; }));
 for (const st of STATE_LIST) {
+  const pilot = statePilot(st, { table, fmtKm2 });
+  if (pilot) {
+    const url = `/en/state/${st.slug}`;
+    add(url, page({ ...pilot, url, mapFirst: true, crumbs: [['Home', '/'], ['States', '/en/states'], [st.name, url]],
+      ld: [{ '@context': 'https://schema.org', '@type': 'Article', headline: pilot.title, inLanguage: 'en', dateModified: TODAY }] }));
+    continue;
+  }
   { const ss = [...new Set(st.maps.map(m => m.s))].sort((a, b) => a - b), nm = st.name.replace(/^the /i, ''), The = art(nm) !== nm ? 'the ' : '', Nm = The ? 'The ' + nm : nm;
     const mods = [...new Set(feats(SNAPS.at(-1)).filter(f => f.properties.n && !isTribal(f.properties.n) && inB(st.peak.f._b, geoCentroid(f)) && geoContains(st.peak.f, geoCentroid(f))).map(f => CN2[f.properties.n] || polName(f.properties.n)))].filter(m => m !== st.name);
     const qa = [[`When does ${The}${nm} appear on the map?`, ss.length === 1 ? `${Nm} appears on one border map, the map for ${fy(ss[0])}.` : `${Nm} appears on ${ss.length} of the ${SNAPS.length} border maps, from ${fy(ss[0])}${ss.at(-1) === SNAPS.at(-1) ? ' to today' : ` to ${fy(ss.at(-1))}`}.`],
@@ -1018,6 +1048,22 @@ write('index.html', fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').repla
 for (const s of SNAPS) NEED.add(`europe|${s}`), NEED.add(`world|${s}`);
 const SVGS = new Map();
 for (const k of NEED) { const [r, s] = k.split('|'); const svg = mapSVG(+s, r); SVGS.set(k, svg); write(mapUrl(+s, r).slice(1), svg); }
+// Publish the illustrated maps in both editable vector and search-friendly raster formats.
+{
+  const illustrations = path.join(ROOT, 'seo', 'assets');
+  const { Resvg } = await import('@resvg/resvg-js');
+  const sharp = (await import('sharp')).default;
+  const fontDir = path.join(ROOT, 'node_modules/dejavu-fonts-ttf/ttf');
+  const fontFiles = fs.readdirSync(fontDir)
+    .filter(name => /^DejaVu(?:Sans|Serif)(?:-Bold)?\.ttf$/.test(name))
+    .map(name => path.join(fontDir, name));
+  for (const name of fs.readdirSync(illustrations).filter(name => name.endsWith('.svg')).sort()) {
+    const svg = fs.readFileSync(path.join(illustrations, name));
+    write('maps/img/' + name, svg);
+    const png = new Resvg(svg, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'DejaVu Sans' } }).render().asPng();
+    await sharp(png).webp({ quality: 90 }).toFile(path.join(OUT, 'maps/img', path.basename(name, '.svg') + '.webp'));
+  }
+}
 // social preview images (1200×630 JPEG) for every map used on a page
 try {
   const { Resvg } = await import('@resvg/resvg-js');
